@@ -35,7 +35,12 @@ const CHARACTER_TYPES = [
     id: "circle",
     label: "まる",
     create(x, y) {
-      return Bodies.circle(x, y, 23);
+      const body = Bodies.circle(x, y, 23);
+      // 真円は着地時のわずかな数値誤差でも自転を始め、摩擦でそのまま
+      // 転がって横に逃げてしまう。回転だけを止めて「転がる」を防ぐ
+      // (四角や人型はあえて回転させて倒れる=崩壊の面白さを残す)
+      Body.setInertia(body, Infinity);
+      return body;
     },
   },
   {
