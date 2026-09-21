@@ -11,7 +11,7 @@ Matter.Common.setDecomp(decomp);
 const CANVAS_W = 380;
 const CANVAS_H = 640;
 const GROUND_Y = CANVAS_H - 60;
-const GROUND_W = 300;
+const GROUND_W = 340;
 const SPAWN_Y = 70;
 const MOVE_SPEED = 4.5; // px / frame
 const SETTLE_FRAMES_NEEDED = 30; // 約0.5秒(60fps)
