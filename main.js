@@ -23,12 +23,14 @@ const PLAYER_COLORS = { 1: "#4a90d9", 2: "#e8615d" };
 
 // キャラクター（人物）の形状定義。
 // 画像を用意したらここに imageSrc を追加して描画を差し替える。
+// 角丸め(chamfer)はMatterの多角形近似がごく僅かに左右非対称になり、
+// 真下に落としても毎回同じ方向に傾いてズレる原因になるため使わない。
 const CHARACTER_TYPES = [
   {
     id: "square",
     label: "しかく",
     create(x, y) {
-      return Bodies.rectangle(x, y, 42, 42, { chamfer: { radius: 4 } });
+      return Bodies.rectangle(x, y, 42, 42);
     },
   },
   {
@@ -47,14 +49,14 @@ const CHARACTER_TYPES = [
     id: "tall",
     label: "のっぽ",
     create(x, y) {
-      return Bodies.rectangle(x, y, 26, 66, { chamfer: { radius: 4 } });
+      return Bodies.rectangle(x, y, 26, 66);
     },
   },
   {
     id: "wide",
     label: "ワイド",
     create(x, y) {
-      return Bodies.rectangle(x, y, 66, 26, { chamfer: { radius: 4 } });
+      return Bodies.rectangle(x, y, 66, 26);
     },
   },
   {
@@ -64,9 +66,7 @@ const CHARACTER_TYPES = [
       const headR = 14;
       const torsoW = 30;
       const torsoH = 44;
-      const torso = Bodies.rectangle(x, y + headR + 2, torsoW, torsoH, {
-        chamfer: { radius: 4 },
-      });
+      const torso = Bodies.rectangle(x, y + headR + 2, torsoW, torsoH);
       const head = Bodies.circle(x, y - torsoH / 2 - 2, headR);
       return Body.create({ parts: [torso, head] });
     },
