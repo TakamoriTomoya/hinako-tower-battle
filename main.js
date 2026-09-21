@@ -23,7 +23,7 @@ const FALL_Y = CANVAS_H; // これを超えたら「落下」＝タワー崩壊
 const MAX_FALL_SPEED = 15;
 const PHYSICS_SUBSTEPS = 4; // 1描画フレームを何回に分けて物理計算するか
 
-const PLAYER_COLORS = { 1: "#4a90d9", 2: "#e8615d" };
+const PLAYER_COLORS = { 1: "#d9436b", 2: "#1e80c9" };
 
 // 弾まない(スーパーボールのような反発をなくす)・滑りにくい、硬い手触りにする
 const PIECE_MATERIAL = { restitution: 0, friction: 0.6, frictionStatic: 0.9 };
@@ -106,18 +106,24 @@ World.add(engine.world, [ground]);
 // ---- DOM ----
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
+const homeScreen = document.getElementById("homeScreen");
+const battleScreen = document.getElementById("battleScreen");
 const turnLabel = document.getElementById("turnLabel");
+const chipP1 = document.getElementById("chipP1");
+const chipP2 = document.getElementById("chipP2");
 const gameOverOverlay = document.getElementById("gameOverOverlay");
 const gameOverTitle = document.getElementById("gameOverTitle");
+const startBtn = document.getElementById("startBtn");
 const restartBtn = document.getElementById("restartBtn");
+const homeBtn = document.getElementById("homeBtn");
 const leftBtn = document.getElementById("leftBtn");
 const rightBtn = document.getElementById("rightBtn");
 const dropBtn = document.getElementById("dropBtn");
 
 // ---- ゲーム状態 ----
-const STATE = { AIMING: "aiming", DROPPING: "dropping", GAMEOVER: "gameover" };
+const STATE = { HOME: "home", AIMING: "aiming", DROPPING: "dropping", GAMEOVER: "gameover" };
 
-let state = STATE.AIMING;
+let state = STATE.HOME;
 let currentPlayer = 1;
 let currentBody = null;
 let currentType = null;
@@ -145,8 +151,11 @@ function spawnPiece() {
 }
 
 function updateTurnLabel() {
-  turnLabel.textContent = `プレイヤー${currentPlayer}の番`;
-  turnLabel.style.color = PLAYER_COLORS[currentPlayer];
+  turnLabel.textContent = `プレイヤー${currentPlayer}の番！`;
+  chipP1.classList.toggle("active", currentPlayer === 1);
+  chipP1.classList.toggle("inactive", currentPlayer !== 1);
+  chipP2.classList.toggle("active", currentPlayer === 2);
+  chipP2.classList.toggle("inactive", currentPlayer !== 2);
 }
 
 function dropPiece() {
@@ -191,8 +200,7 @@ function checkSettled() {
 function endGame(loserPlayer) {
   state = STATE.GAMEOVER;
   const winner = loserPlayer === 1 ? 2 : 1;
-  gameOverTitle.textContent = `プレイヤー${winner}の勝ち！`;
-  gameOverTitle.style.color = PLAYER_COLORS[winner];
+  gameOverTitle.textContent = `プレイヤー${winner}の勝ち！🎉`;
   gameOverOverlay.hidden = false;
 }
 
@@ -202,14 +210,28 @@ function nextTurn() {
   spawnPiece();
 }
 
-function restartGame() {
+function clearWorld() {
   const bodies = Composite.allBodies(engine.world).filter((b) => b !== ground);
   bodies.forEach((b) => World.remove(engine.world, b));
+}
+
+function startBattle() {
+  clearWorld();
   currentPlayer = 1;
   nextType = pickRandomType();
   gameOverOverlay.hidden = true;
+  homeScreen.hidden = true;
+  battleScreen.hidden = false;
   state = STATE.AIMING;
   spawnPiece();
+}
+
+function goHome() {
+  clearWorld();
+  state = STATE.HOME;
+  gameOverOverlay.hidden = true;
+  battleScreen.hidden = true;
+  homeScreen.hidden = false;
 }
 
 // ---- 入力 ----
@@ -220,7 +242,9 @@ rightBtn.addEventListener("pointerdown", () => (heldDirection = 1));
   rightBtn.addEventListener(ev, () => (heldDirection = 0));
 });
 dropBtn.addEventListener("click", dropPiece);
-restartBtn.addEventListener("click", restartGame);
+startBtn.addEventListener("click", startBattle);
+restartBtn.addEventListener("click", startBattle);
+homeBtn.addEventListener("click", goHome);
 
 window.addEventListener("keydown", (e) => {
   if (e.code === "ArrowLeft") heldDirection = -1;
@@ -284,11 +308,11 @@ function render() {
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
   // 土台
-  ctx.fillStyle = "#7a8a99";
+  ctx.fillStyle = "#e0b98c";
   ctx.fillRect(CANVAS_W / 2 - GROUND_W / 2, GROUND_Y - 10, GROUND_W, 20);
 
   // 落下ライン(目安)
-  ctx.strokeStyle = "rgba(232,97,93,0.4)";
+  ctx.strokeStyle = "rgba(255,111,145,0.4)";
   ctx.setLineDash([6, 6]);
   ctx.beginPath();
   ctx.moveTo(0, FALL_Y - 1);
@@ -307,7 +331,7 @@ function loop(now) {
   const delta = Math.min(33, now - lastTime);
   lastTime = now;
 
-  if (state !== STATE.GAMEOVER) {
+  if (state === STATE.AIMING || state === STATE.DROPPING) {
     if (state === STATE.AIMING && currentBody) {
       let x = currentBody.position.x + heldDirection * MOVE_SPEED;
       x = Math.max(30, Math.min(CANVAS_W - 30, x));
@@ -344,10 +368,11 @@ function loop(now) {
     }
   }
 
-  render();
+  if (state !== STATE.HOME) {
+    render();
+  }
   requestAnimationFrame(loop);
 }
 
 // ---- 起動 ----
-spawnPiece();
 requestAnimationFrame(loop);

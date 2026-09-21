@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+  <script src="./image-slot.js"></script>
+  <style>
+    body { margin: 0; background: #F2EFE6; }
+    .phones { display: flex; flex-wrap: wrap; gap: 32px; padding: 32px; }
+    .phone { width: 360px; height: 760px; background: #FFFBF0; border-radius: 32px; box-shadow: 0 8px 0 rgba(0,0,0,0.06), 0 20px 40px rgba(0,0,0,0.08); overflow: hidden; display: flex; flex-direction: column; position: relative; font-family: 'Nunito', sans-serif; }
+    .statusbar { height: 28px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; font-size: 11px; color: #4A4237; font-weight: 700; }
+    .label { text-align: center; font-family: 'Nunito', sans-serif; font-size: 13px; color: #8A8168; padding: 8px 0; font-weight: 700; }
+    .pop-btn { display: flex; align-items: center; justify-content: center; border: none; border-radius: 18px; font-family: 'Baloo 2', sans-serif; font-weight: 700; cursor: pointer; transition: transform .1s; }
+    .pop-btn:active { transform: scale(0.96); }
+    .pop-btn-primary { background: #FF6F91; color: #FFFBF0; box-shadow: 0 4px 0 #D94F6E; }
+    .pop-btn-primary:hover { background: #FF8AA6; }
+    .pop-btn-secondary { background: #FFC93C; color: #4A4237; box-shadow: 0 4px 0 #D9A81E; }
+    .pop-btn-secondary:hover { background: #FFD666; }
+    .pop-btn-ghost { background: #EAF7EE; color: #2FB870; box-shadow: 0 4px 0 #CDEBD6; }
+    .pop-btn-ghost:hover { background: #D9F2E0; }
+    .chip { border-radius: 999px; padding: 6px 14px; font-weight: 800; font-size: 13px; }
+  </style>
+</helmet>
+
+<div class="label" style="padding-left:32px">画面デザイン — どうぶつタワーバトル（ポップ／ビタミンカラー）</div>
+<div class="phones">
+
+  <!-- Home / Title screen -->
+  <div class="phone">
+    <div class="statusbar"><span>9:41</span><span>100%</span></div>
+    <div style="flex:1; display:flex; flex-direction:column; padding: 20px; gap: 18px; background: linear-gradient(180deg, #FFF6D9 0%, #FFFBF0 40%);">
+      <div style="text-align:center; padding-top: 18px;">
+        <div style="font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 36px; line-height:1.05; color: #4A4237;">どうぶつ<br><span style="color:#FF6F91;">タワーバトル</span></div>
+        <div style="font-size: 13px; font-weight: 700; color: #8A8168; margin-top: 8px;">のんびりオンライン対戦ゲーム</div>
+      </div>
+      <div style="flex:1; border-radius: 24px; background: #FFE7A3; overflow:hidden;">
+        <image-slot id="pop-home-hero" shape="rect" placeholder="どうぶつタワーのイラスト"></image-slot>
+      </div>
+      <div style="display:flex; justify-content:space-between; gap:8px;">
+        <div class="chip" style="background:#FFE1EA; color:#D9436B;">🏆 1240</div>
+        <div class="chip" style="background:#E1F5E6; color:#2FA363;">🔥 3連勝</div>
+        <div class="chip" style="background:#FFF1CC; color:#C68A11;">🪙 560</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap: 12px;">
+        <button class="pop-btn pop-btn-primary" style="height:52px; font-size:18px;">対戦を始める</button>
+        <button class="pop-btn pop-btn-secondary" style="height:48px; font-size:16px;">練習する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Battle screen -->
+  <div class="phone">
+    <div class="statusbar"><span>9:42</span><span>100%</span></div>
+    <div style="flex:1; display:flex; flex-direction:column; padding: 16px 20px; gap: 12px; background:#EFF8FF;">
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div class="chip" style="background:#FFE1EA; color:#D9436B; font-size:12px;">たろう 1240</div>
+        <div style="font-family:'Baloo 2', sans-serif; font-size: 26px; font-weight: 800; color: #3AAFFF;">00:07</div>
+        <div class="chip" style="background:#E1F0FF; color:#1E80C9; font-size:12px;">みかん 1310</div>
+      </div>
+      <div style="flex:1; border-radius: 24px; background: #DFF0FF; overflow:hidden;">
+        <image-slot id="pop-battle-tower" shape="rect" placeholder="対戦中のタワー画面"></image-slot>
+      </div>
+      <div style="text-align:center; font-family:'Baloo 2', sans-serif; font-size: 18px; font-weight: 700; color: #4A4237;">あなたの番です！</div>
+      <div style="display:flex; justify-content:center; gap: 10px;">
+        <button class="pop-btn pop-btn-ghost" style="width:88px; height:48px; font-size:20px;">↺</button>
+        <button class="pop-btn pop-btn-primary" style="width:130px; height:48px; font-size:18px;">積む！</button>
+        <button class="pop-btn pop-btn-ghost" style="width:88px; height:48px; font-size:20px;">↻</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Result screen -->
+  <div class="phone">
+    <div class="statusbar"><span>9:43</span><span>100%</span></div>
+    <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding: 24px 20px; gap: 14px; background: linear-gradient(180deg, #FFE1EA 0%, #FFFBF0 45%);">
+      <div class="chip" style="background:#FF6F91; color:#FFFBF0; margin-top:8px;">VICTORY!</div>
+      <div style="font-family:'Baloo 2', sans-serif; font-weight: 800; font-size: 44px; color: #4A4237;">勝利！🎉</div>
+      <div style="width: 220px; height: 200px; border-radius: 24px; background: #FFE7A3; overflow:hidden;">
+        <image-slot id="pop-result-tower" shape="rect" placeholder="勝利したタワーの写真"></image-slot>
+      </div>
+      <div style="width:100%; display:flex; justify-content:space-between; font-weight: 800; font-size: 14px; color: #8A8168; margin-top:4px;">
+        <span>レート</span><span style="color: #4A4237;">1240 → <span style="color: #FF6F91;">1268</span></span>
+      </div>
+      <div style="width:100%; display:flex; justify-content:space-between; font-weight: 800; font-size: 14px; color: #8A8168;">
+        <span>積んだ数</span><span style="color: #4A4237;">14 段</span>
+      </div>
+      <div style="flex:1;"></div>
+      <div style="display:flex; flex-direction:column; gap: 12px; width:100%;">
+        <button class="pop-btn pop-btn-primary" style="height:52px; font-size:18px;">もう一度対戦する</button>
+        <button class="pop-btn pop-btn-secondary" style="height:48px; font-size:16px;">ホームへ戻る</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</x-dc>
+</body>
+</html>
