@@ -21,6 +21,7 @@ const FALL_Y = CANVAS_H; // これを超えたら「落下」＝タワー崩壊
 // 高い位置から落ちるほど衝突時の速度が上がり、めり込み量が増えて
 // 補正で押し戻される瞬間が「跳ねた」ように見えてしまう。速度に上限をつけて防ぐ。
 const MAX_FALL_SPEED = 15;
+const PHYSICS_SUBSTEPS = 4; // 1描画フレームを何回に分けて物理計算するか
 
 const PLAYER_COLORS = { 1: "#4a90d9", 2: "#e8615d" };
 
@@ -341,8 +342,14 @@ function loop(now) {
       Body.setPosition(currentBody, { x, y: SPAWN_Y });
     }
 
-    Engine.update(engine, delta);
-    capFallSpeed();
+    // 1フレーム分をまとめて1回で計算すると、高速で落ちた駒が着地の瞬間に
+    // 大きくめり込んでから補正で戻る=「少し沈む」ように見える。
+    // 同じ時間を細かく分けて計算することで、見た目の速さは変えずにめり込みを防ぐ。
+    const substepDelta = delta / PHYSICS_SUBSTEPS;
+    for (let i = 0; i < PHYSICS_SUBSTEPS; i++) {
+      Engine.update(engine, substepDelta);
+      capFallSpeed();
+    }
 
     if (checkFallen()) {
       endGame(currentPlayer);
