@@ -37,7 +37,9 @@ const CHARACTER_TYPES = [
     id: "square",
     label: "しかく",
     create(x, y) {
-      return Bodies.rectangle(x, y, 42, 42, PIECE_MATERIAL);
+      const body = Bodies.rectangle(x, y, 42, 42, PIECE_MATERIAL);
+      body.shape = { kind: "rect", w: 42, h: 42 };
+      return body;
     },
   },
   {
@@ -49,6 +51,7 @@ const CHARACTER_TYPES = [
       // 転がって横に逃げてしまう。回転だけを止めて「転がる」を防ぐ
       // (四角や人型はあえて回転させて倒れる=崩壊の面白さを残す)
       Body.setInertia(body, Infinity);
+      body.shape = { kind: "circle", r: 23 };
       return body;
     },
   },
@@ -56,14 +59,18 @@ const CHARACTER_TYPES = [
     id: "tall",
     label: "のっぽ",
     create(x, y) {
-      return Bodies.rectangle(x, y, 26, 66, PIECE_MATERIAL);
+      const body = Bodies.rectangle(x, y, 26, 66, PIECE_MATERIAL);
+      body.shape = { kind: "rect", w: 26, h: 66 };
+      return body;
     },
   },
   {
     id: "wide",
     label: "ワイド",
     create(x, y) {
-      return Bodies.rectangle(x, y, 66, 26, PIECE_MATERIAL);
+      const body = Bodies.rectangle(x, y, 66, 26, PIECE_MATERIAL);
+      body.shape = { kind: "rect", w: 66, h: 26 };
+      return body;
     },
   },
   {
@@ -74,11 +81,24 @@ const CHARACTER_TYPES = [
       const torsoW = 30;
       const torsoH = 44;
       const torso = Bodies.rectangle(x, y + headR + 2, torsoW, torsoH, PIECE_MATERIAL);
+      torso.shape = { kind: "rect", w: torsoW, h: torsoH };
+      torso.noImage = true; // 写真は頭だけに貼り、胴体は色のまま(顔が二重に見えるのを防ぐ)
       const head = Bodies.circle(x, y - torsoH / 2 - 2, headR, PIECE_MATERIAL);
-      return Body.create({ parts: [torso, head] });
+      head.shape = { kind: "circle", r: headR };
+      const body = Body.create({ parts: [torso, head] });
+      return body;
     },
   },
 ];
+
+// ---- キャラクター画像 ----
+// 読み込みが終わるまでは仮図形(色+顔)で表示し、終わったら自動的に写真へ切り替わる。
+const characterImage = new Image();
+let characterImageReady = false;
+characterImage.onload = () => {
+  characterImageReady = true;
+};
+characterImage.src = "images/IMG_5388.PNG";
 
 // ---- Matter セットアップ ----
 const engine = Engine.create({
@@ -276,37 +296,23 @@ window.addEventListener("keyup", (e) => {
 });
 
 // ---- 描画 ----
-function drawBody(context, body) {
-  const parts = body.parts.length > 1 ? body.parts.slice(1) : [body];
-  const color = (body.plugin && body.plugin.color) || "#999";
+// 写真をどの部分を中心に切り抜くか(元画像に対する割合。顔が写っている位置)
+const IMAGE_FOCUS_X = 0.26;
+const IMAGE_FOCUS_Y = 0.1;
 
-  parts.forEach((part) => {
-    context.beginPath();
-    if (part.circleRadius) {
-      context.arc(part.position.x, part.position.y, part.circleRadius, 0, Math.PI * 2);
-    } else {
-      const verts = part.vertices;
-      context.moveTo(verts[0].x, verts[0].y);
-      for (let i = 1; i < verts.length; i++) context.lineTo(verts[i].x, verts[i].y);
-      context.closePath();
-    }
-    context.fillStyle = color;
-    context.fill();
-    context.lineWidth = 2;
-    context.strokeStyle = "rgba(0,0,0,0.25)";
-    context.stroke();
-  });
-
-  // 顔は「頭」パーツ（円）があればそこに、なければ本体中心に描く
-  const headPart = parts.find((p) => p.circleRadius) || body;
-  drawFace(context, headPart.position, body.angle, headPart.circleRadius || 14);
+function drawCoverImage(context, img, boxW, boxH) {
+  const scale = Math.max(boxW / img.width, boxH / img.height);
+  const scaledW = img.width * scale;
+  const scaledH = img.height * scale;
+  let offsetX = boxW / 2 - IMAGE_FOCUS_X * scaledW;
+  let offsetY = boxH / 2 - IMAGE_FOCUS_Y * scaledH;
+  offsetX = Math.min(0, Math.max(boxW - scaledW, offsetX));
+  offsetY = Math.min(0, Math.max(boxH - scaledH, offsetY));
+  context.drawImage(img, offsetX, offsetY, scaledW, scaledH);
 }
 
-function drawFace(context, pos, angle, scale) {
-  const s = Math.max(0.5, scale / 16);
-  context.save();
-  context.translate(pos.x, pos.y);
-  context.rotate(angle);
+function drawFaceLocal(context, refSize) {
+  const s = Math.max(0.5, refSize / 16);
   context.fillStyle = "rgba(30,30,30,0.85)";
   context.beginPath();
   context.arc(-4 * s, -2 * s, 1.8 * s, 0, Math.PI * 2);
@@ -317,7 +323,55 @@ function drawFace(context, pos, angle, scale) {
   context.strokeStyle = "rgba(30,30,30,0.85)";
   context.lineWidth = 1.5;
   context.stroke();
+}
+
+function drawPart(context, body, part, color, drawFaceHere) {
+  const shape = part.shape || { kind: "circle", r: part.circleRadius || 20 };
+  const boxW = shape.kind === "circle" ? shape.r * 2 : shape.w;
+  const boxH = shape.kind === "circle" ? shape.r * 2 : shape.h;
+
+  context.save();
+  context.translate(part.position.x, part.position.y);
+  context.rotate(body.angle);
+
+  context.beginPath();
+  if (shape.kind === "circle") {
+    context.arc(0, 0, shape.r, 0, Math.PI * 2);
+  } else {
+    context.rect(-boxW / 2, -boxH / 2, boxW, boxH);
+  }
+  context.closePath();
+
+  if (characterImageReady && !part.noImage) {
+    context.save();
+    context.clip();
+    context.translate(-boxW / 2, -boxH / 2);
+    drawCoverImage(context, characterImage, boxW, boxH);
+    context.restore();
+    context.lineWidth = 3;
+    context.strokeStyle = color;
+    context.stroke();
+  } else {
+    context.fillStyle = color;
+    context.fill();
+    context.lineWidth = 2;
+    context.strokeStyle = "rgba(0,0,0,0.25)";
+    context.stroke();
+    if (drawFaceHere) drawFaceLocal(context, Math.min(boxW, boxH) / 2);
+  }
+
   context.restore();
+}
+
+function drawBody(context, body) {
+  const isCompound = body.parts.length > 1;
+  const parts = isCompound ? body.parts.slice(1) : [body];
+  const color = (body.plugin && body.plugin.color) || "#999";
+
+  parts.forEach((part) => {
+    const drawFaceHere = !isCompound || (part.shape && part.shape.kind === "circle");
+    drawPart(context, body, part, color, drawFaceHere);
+  });
 }
 
 function render() {
