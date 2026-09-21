@@ -4,6 +4,9 @@
 
 const { Engine, World, Bodies, Body, Composite } = Matter;
 
+// 写真の輪郭(凹みあり)を複数の凸パーツに自動分割するためのライブラリを登録
+Matter.Common.setDecomp(decomp);
+
 // ---- 設定 ----
 const CANVAS_W = 380;
 const CANVAS_H = 640;
@@ -23,24 +26,218 @@ const FALL_Y = CANVAS_H; // これを超えたら「落下」＝タワー崩壊
 const MAX_FALL_SPEED = 15;
 const PHYSICS_SUBSTEPS = 4; // 1描画フレームを何回に分けて物理計算するか
 
-// 弾まない(スーパーボールのような反発をなくす)・滑りにくい、硬い手触りにする
+// 弾まない(スーパーボールのような反発をなくす)・滑りにくい、硬い手触りにする。
+// mass/densityはあえて指定しない → 駒の重さは各写真の実際の輪郭の面積から
+// Matterが自動計算する(図形が大きい/太い駒ほど重くなり、倒れにくく・相手を倒しやすくなる)。
 const PIECE_MATERIAL = { restitution: 0, friction: 0.6, frictionStatic: 0.9 };
 
-// ---- プレイヤーごとの駒(写真をそのまま使用) ----
-// 当たり判定は写真の縦横比に合わせた長方形。見た目は図形に切り抜かず画像をそのまま描画する。
-const PIECE_HEIGHT = 100;
-const PLAYER_PIECES = {
-  1: { src: "images/IMG_5388.PNG", naturalW: 1359, naturalH: 2103, img: new Image(), ready: false },
-  2: { src: "images/IMG_5389.PNG", naturalW: 1354, naturalH: 2427, img: new Image(), ready: false },
-};
-Object.values(PLAYER_PIECES).forEach((piece) => {
-  piece.h = PIECE_HEIGHT;
-  piece.w = PIECE_HEIGHT * (piece.naturalW / piece.naturalH);
+// ---- 駒に使う画像(images/配下の写真を毎回ランダムに使う) ----
+// 新しい画像ファイルを追加したら、ここにファイル名を追記する。
+const PIECE_IMAGE_FILES = [
+  "IMG_5388.PNG",
+  "IMG_5389.PNG",
+  "IMG_5390.PNG",
+  "2C60643C-D607-450C-896E-B01BE80B8D9C.PNG",
+];
+
+const PIECE_HEIGHT = 100; // ゲーム内でのおおよその高さ(px)。写真ごとに幅はここから縦横比で決まる
+const MASK_GRID_STEP = 16; // 輪郭抽出用グリッドの間隔(元画像のpx単位) : 小さいほど輪郭が精細だが重くなる
+const ALPHA_THRESHOLD = 24; // これより不透明なピクセルだけを「駒の中身」とみなす
+const SIMPLIFY_EPSILON = 5; // 輪郭の単純化の強さ(グリッド単位)。大きいほど頂点が減って軽く安定するが、細部は失われる
+
+// 点群から凸包(すべての点を囲む、とがった角だけを結んだ輪郭)を求める。
+// 輪郭抽出に失敗した場合の非常用フォールバックとしてのみ使う。
+function convexHull(points) {
+  const pts = points.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  upper.pop();
+  lower.pop();
+  return lower.concat(upper);
+}
+
+// 2値グリッドから輪郭を抽出する。
+// 各塗りセルの「背景と接する辺」をすべて集め、端点が一致する辺同士をつないで
+// 1周のループにする(セルからセルへ辿る方式よりも確実に一周できる)。
+function traceContour(grid, gridW, gridH) {
+  const isFilled = (x, y) => x >= 0 && y >= 0 && x < gridW && y < gridH && grid[y][x] === 1;
+
+  const edges = [];
+  for (let gy = 0; gy < gridH; gy++) {
+    for (let gx = 0; gx < gridW; gx++) {
+      if (!isFilled(gx, gy)) continue;
+      if (!isFilled(gx, gy - 1)) edges.push({ from: { x: gx, y: gy }, to: { x: gx + 1, y: gy } }); // 上辺
+      if (!isFilled(gx + 1, gy)) edges.push({ from: { x: gx + 1, y: gy }, to: { x: gx + 1, y: gy + 1 } }); // 右辺
+      if (!isFilled(gx, gy + 1)) edges.push({ from: { x: gx + 1, y: gy + 1 }, to: { x: gx, y: gy + 1 } }); // 下辺
+      if (!isFilled(gx - 1, gy)) edges.push({ from: { x: gx, y: gy + 1 }, to: { x: gx, y: gy } }); // 左辺
+    }
+  }
+  if (edges.length === 0) return [];
+
+  const key = (p) => `${p.x},${p.y}`;
+  const byStart = new Map();
+  edges.forEach((e) => {
+    const k = key(e.from);
+    if (!byStart.has(k)) byStart.set(k, []);
+    byStart.get(k).push(e);
+  });
+
+  const used = new Set();
+  let bestLoop = [];
+  edges.forEach((startEdge) => {
+    if (used.has(startEdge)) return;
+    const loop = [];
+    let current = startEdge;
+    let guard = edges.length + 4;
+    while (current && !used.has(current) && guard-- > 0) {
+      used.add(current);
+      loop.push(current.from);
+      const candidates = byStart.get(key(current.to)) || [];
+      current = candidates.find((c) => !used.has(c));
+    }
+    if (loop.length > bestLoop.length) bestLoop = loop;
+  });
+  return bestLoop;
+}
+
+// Douglas-Peucker法で折れ線(閉じたループ)の頂点数を間引く
+function simplifyPolygon(points, epsilon) {
+  if (points.length < 3) return points;
+  const perpDist = (p, a, b) => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+    return Math.abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / len;
+  };
+  const dp = (pts) => {
+    if (pts.length < 3) return pts;
+    let maxDist = 0;
+    let index = 0;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const d = perpDist(pts[i], pts[0], pts[pts.length - 1]);
+      if (d > maxDist) {
+        maxDist = d;
+        index = i;
+      }
+    }
+    if (maxDist > epsilon) {
+      const left = dp(pts.slice(0, index + 1));
+      const right = dp(pts.slice(index));
+      return left.slice(0, -1).concat(right);
+    }
+    return [pts[0], pts[pts.length - 1]];
+  };
+  return dp(points);
+}
+
+// 多角形の面積重心(頂点の単純平均ではなく、面積で重み付けした正しい重心)
+function polygonCentroid(pts) {
+  let area = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p0 = pts[i];
+    const p1 = pts[(i + 1) % pts.length];
+    const cross = p0.x * p1.y - p1.x * p0.y;
+    area += cross;
+    cx += (p0.x + p1.x) * cross;
+    cy += (p0.y + p1.y) * cross;
+  }
+  area *= 0.5;
+  if (Math.abs(area) < 1e-6) {
+    const sum = pts.reduce((a, p) => ({ x: a.x + p.x, y: a.y + p.y }), { x: 0, y: 0 });
+    return { x: sum.x / pts.length, y: sum.y / pts.length };
+  }
+  return { x: cx / (6 * area), y: cy / (6 * area) };
+}
+
+// 画像の不透明部分から輪郭(腕と脚の間などの凹みも含む)を抽出し、
+// 単純化してゲーム内サイズに縮小しておく。poly-decompが複数の凸パーツに自動分割する。
+function prepareHull(piece) {
+  const img = piece.img;
+  const off = document.createElement("canvas");
+  off.width = img.naturalWidth;
+  off.height = img.naturalHeight;
+  const octx = off.getContext("2d");
+  octx.drawImage(img, 0, 0);
+  const { data } = octx.getImageData(0, 0, off.width, off.height);
+  const w = off.width;
+  const h = off.height;
+
+  const gridW = Math.ceil(w / MASK_GRID_STEP);
+  const gridH = Math.ceil(h / MASK_GRID_STEP);
+  const grid = [];
+  for (let gy = 0; gy < gridH; gy++) {
+    const row = new Array(gridW).fill(0);
+    for (let gx = 0; gx < gridW; gx++) {
+      const px = Math.min(w - 1, gx * MASK_GRID_STEP + (MASK_GRID_STEP >> 1));
+      const py = Math.min(h - 1, gy * MASK_GRID_STEP + (MASK_GRID_STEP >> 1));
+      row[gx] = data[(py * w + px) * 4 + 3] > ALPHA_THRESHOLD ? 1 : 0;
+    }
+    grid.push(row);
+  }
+
+  const traced = traceContour(grid, gridW, gridH);
+  let outline = null;
+  if (traced.length >= 3) {
+    const simplified = simplifyPolygon(traced, SIMPLIFY_EPSILON);
+    if (simplified.length >= 3) {
+      // traceContourはセルの「角」の座標を返すので、そのままグリッド間隔倍すればよい
+      outline = simplified.map((p) => ({
+        x: p.x * MASK_GRID_STEP,
+        y: p.y * MASK_GRID_STEP,
+      }));
+    }
+  }
+  if (!outline) {
+    // 輪郭抽出に失敗した場合は凸包にフォールバック
+    const points = [];
+    for (let gy = 0; gy < gridH; gy++) {
+      for (let gx = 0; gx < gridW; gx++) {
+        if (grid[gy][gx]) points.push({ x: gx * MASK_GRID_STEP, y: gy * MASK_GRID_STEP });
+      }
+    }
+    outline = points.length >= 3 ? convexHull(points) : [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }];
+  }
+
+  const scale = PIECE_HEIGHT / img.naturalHeight;
+  piece.w = img.naturalWidth * scale;
+  piece.h = img.naturalHeight * scale;
+
+  piece.hullLocal = outline.map((p) => ({ x: p.x * scale, y: p.y * scale }));
+  const centroid = polygonCentroid(piece.hullLocal);
+  // 描画時、画像の左上をこの分だけずらせば「輪郭の重心(=Matterが置く駒の中心)」と
+  // 「写真の見た目」がぴったり一致する
+  piece.imageOffsetX = -centroid.x;
+  piece.imageOffsetY = -centroid.y;
+}
+
+const pieceImages = PIECE_IMAGE_FILES.map((file) => {
+  const piece = { src: `images/${file}`, img: new Image(), ready: false };
   piece.img.onload = () => {
+    prepareHull(piece);
     piece.ready = true;
   };
   piece.img.src = piece.src;
+  return piece;
 });
+
+function pickRandomPiece() {
+  const ready = pieceImages.filter((p) => p.ready && p.hullLocal);
+  const pool = ready.length > 0 ? ready : pieceImages;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 // ---- Matter セットアップ ----
 const engine = Engine.create({
@@ -101,8 +298,15 @@ const ROTATE_STEP = Math.PI / 4; // 1回押しで45度
 const FALLING_SPEED_THRESHOLD = 1.2; // これを一度でも超えたら「本当に落下し始めた」とみなす
 
 function spawnPiece() {
-  const piece = PLAYER_PIECES[currentPlayer];
-  const body = Bodies.rectangle(CANVAS_W / 2, SPAWN_Y, piece.w, piece.h, PIECE_MATERIAL);
+  const piece = pickRandomPiece();
+  let body;
+  if (piece.hullLocal) {
+    // 写真の不透明部分を包む凸包を当たり判定にする(見えない四角の余白をなくす)
+    body = Bodies.fromVertices(CANVAS_W / 2, SPAWN_Y, [piece.hullLocal], PIECE_MATERIAL, true);
+  } else {
+    // 画像の読み込み・輪郭計算がまだ終わっていない場合の一時的なフォールバック
+    body = Bodies.rectangle(CANVAS_W / 2, SPAWN_Y, PIECE_HEIGHT * 0.6, PIECE_HEIGHT, PIECE_MATERIAL);
+  }
   Body.setStatic(body, true);
   body.plugin = { piece };
   World.add(engine.world, body);
@@ -237,11 +441,12 @@ function drawBody(context, body) {
   context.rotate(body.angle);
 
   if (piece.ready) {
-    context.drawImage(piece.img, -piece.w / 2, -piece.h / 2, piece.w, piece.h);
+    // imageOffsetX/Yで「当たり判定(凸包)の重心」と「写真の見た目」の位置を一致させる
+    context.drawImage(piece.img, piece.imageOffsetX, piece.imageOffsetY, piece.w, piece.h);
   } else {
     // 画像の読み込みが終わるまでの仮表示
     context.fillStyle = "rgba(74, 66, 55, 0.15)";
-    context.fillRect(-piece.w / 2, -piece.h / 2, piece.w, piece.h);
+    context.fillRect(-PIECE_HEIGHT * 0.3, -PIECE_HEIGHT / 2, PIECE_HEIGHT * 0.6, PIECE_HEIGHT);
   }
 
   context.restore();
