@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>人物タワーバトル</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <h1>人物タワーバトル</h1>
+      <div class="status">
+        <div class="turn" id="turnLabel">プレイヤー1の番</div>
+        <div class="height">たかさ: <span id="heightValue">0</span></div>
+      </div>
+    </header>
+
+    <div class="board-area">
+      <canvas id="gameCanvas" width="380" height="640"></canvas>
+
+      <div class="gameover-overlay" id="gameOverOverlay" hidden>
+        <div class="gameover-card">
+          <p class="gameover-title" id="gameOverTitle">プレイヤー1の勝ち！</p>
+          <button id="restartBtn">もう一度あそぶ</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="next-preview">
+      つぎ: <canvas id="nextCanvas" width="60" height="60"></canvas>
+    </div>
+
+    <div class="controls">
+      <button id="leftBtn" class="ctrl-btn">◀</button>
+      <button id="dropBtn" class="ctrl-btn drop">おとす</button>
+      <button id="rightBtn" class="ctrl-btn">▶</button>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
