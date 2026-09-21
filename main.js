@@ -40,6 +40,14 @@ const PIECE_IMAGE_FILES = [
   "2C60643C-D607-450C-896E-B01BE80B8D9C.PNG",
 ];
 
+// ---- 土台の画像 ----
+const groundImage = new Image();
+let groundImageReady = false;
+groundImage.onload = () => {
+  groundImageReady = true;
+};
+groundImage.src = "土台/B6238857-4BE2-4573-8AEF-009ED34BC525.PNG";
+
 const PIECE_HEIGHT = 100; // ゲーム内でのおおよその高さ(px)。写真ごとに幅はここから縦横比で決まる
 const MASK_GRID_STEP = 16; // 輪郭抽出用グリッドの間隔(元画像のpx単位) : 小さいほど輪郭が精細だが重くなる
 const ALPHA_THRESHOLD = 24; // これより不透明なピクセルだけを「駒の中身」とみなす
@@ -458,8 +466,15 @@ function render() {
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
   // 土台
-  ctx.fillStyle = "#e0b98c";
-  ctx.fillRect(CANVAS_W / 2 - GROUND_W / 2, GROUND_Y - 10, GROUND_W, 20);
+  const groundX = CANVAS_W / 2 - GROUND_W / 2;
+  const groundBarY = GROUND_Y - 10;
+  if (groundImageReady) {
+    // 当たり判定の面(groundBarY)は変えず、見た目だけ下方向に厚みを持たせてパンだと分かりやすくする
+    ctx.drawImage(groundImage, groundX, groundBarY, GROUND_W, 34);
+  } else {
+    ctx.fillStyle = "#e0b98c";
+    ctx.fillRect(groundX, groundBarY, GROUND_W, 20);
+  }
 
   // 落下ライン(目安)
   ctx.strokeStyle = "rgba(255,111,145,0.4)";
