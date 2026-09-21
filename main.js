@@ -79,6 +79,9 @@ const engine = Engine.create({
   velocityIterations: 8, // デフォルトは4
 });
 engine.gravity.y = 1;
+// ほぼ止まった駒は完全に固定(スリープ)させる。これがないと着地後も
+// 計算誤差レベルのごく僅かな揺れが収束しきらず、駒がじわじわにじみ続けてしまう。
+engine.enableSleeping = true;
 
 // 見た目は薄い土台だが、物理判定用の当たり判定は厚みを持たせて
 // 勢いよく積まれた時にすり抜ける(トンネリング)のを防ぐ
@@ -146,6 +149,9 @@ function updateTurnLabel() {
 function dropPiece() {
   if (state !== STATE.AIMING || !currentBody) return;
   Body.setStatic(currentBody, false);
+  // isStatic=trueの間についた「スリープ」扱いが残ると重力すら効かなくなるため、
+  // 動的に戻したタイミングで明示的に起こす
+  Matter.Sleeping.set(currentBody, false);
   state = STATE.DROPPING;
   settleCounter = 0;
   dropElapsedFrames = 0;
