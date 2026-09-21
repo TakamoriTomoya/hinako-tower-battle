@@ -13,7 +13,10 @@ const SPAWN_Y = 70;
 const MOVE_SPEED = 4.5; // px / frame
 const SETTLE_FRAMES_NEEDED = 30; // 約0.5秒(60fps)
 const SETTLE_SPEED_EPS = 0.05;
-const MAX_DROP_WAIT_MS = 4000;
+// 実時間(ms)ではなく実際に進んだシミュレーションフレーム数で計る。
+// タブがバックグラウンドで間引かれた場合など、物理がほとんど進んでいないのに
+// 実時間だけ経過してタイムアウトが誤発動する(＝まだ空中の駒を着地扱いにしてしまう)のを防ぐため。
+const MAX_DROP_WAIT_FRAMES = 240; // 約4秒(60fps)相当
 const FALL_Y = CANVAS_H; // これを超えたら「落下」＝タワー崩壊
 
 const PLAYER_COLORS = { 1: "#4a90d9", 2: "#e8615d" };
@@ -66,12 +69,23 @@ const CHARACTER_TYPES = [
 ];
 
 // ---- Matter セットアップ ----
-const engine = Engine.create();
+const engine = Engine.create({
+  positionIterations: 12, // デフォルト(6)より増やし、積み重なった駒がめり込んですり抜けるのを防ぐ
+  velocityIterations: 8, // デフォルトは4
+});
 engine.gravity.y = 1;
 
-const ground = Bodies.rectangle(CANVAS_W / 2, GROUND_Y, GROUND_W, 20, {
-  isStatic: true,
-});
+// 見た目は薄い土台だが、物理判定用の当たり判定は厚みを持たせて
+// 勢いよく積まれた時にすり抜ける(トンネリング)のを防ぐ
+const GROUND_SURFACE_Y = GROUND_Y - 10;
+const GROUND_BODY_THICKNESS = 300;
+const ground = Bodies.rectangle(
+  CANVAS_W / 2,
+  GROUND_SURFACE_Y + GROUND_BODY_THICKNESS / 2,
+  GROUND_W,
+  GROUND_BODY_THICKNESS,
+  { isStatic: true }
+);
 World.add(engine.world, [ground]);
 
 // ---- DOM ----
@@ -97,7 +111,7 @@ let currentBody = null;
 let currentType = null;
 let nextType = pickRandomType();
 let settleCounter = 0;
-let dropStartedAt = 0;
+let dropElapsedFrames = 0;
 let hasStartedFalling = false;
 let heldDirection = 0; // -1 left, 1 right, 0 none
 
@@ -129,7 +143,7 @@ function dropPiece() {
   Body.setStatic(currentBody, false);
   state = STATE.DROPPING;
   settleCounter = 0;
-  dropStartedAt = performance.now();
+  dropElapsedFrames = 0;
   hasStartedFalling = false;
 }
 
@@ -307,6 +321,7 @@ function loop(now) {
     if (checkFallen()) {
       endGame(currentPlayer);
     } else if (state === STATE.DROPPING) {
+      dropElapsedFrames++;
       if (!hasStartedFalling && maxBodySpeed() > FALLING_SPEED_THRESHOLD) {
         hasStartedFalling = true;
       }
@@ -317,7 +332,7 @@ function loop(now) {
         }
       } else {
         settleCounter = 0;
-        if (now - dropStartedAt > MAX_DROP_WAIT_MS) {
+        if (dropElapsedFrames > MAX_DROP_WAIT_FRAMES) {
           nextTurn();
         }
       }
