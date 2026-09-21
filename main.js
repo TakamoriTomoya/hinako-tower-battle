@@ -46,7 +46,7 @@ let groundImageReady = false;
 groundImage.onload = () => {
   groundImageReady = true;
 };
-groundImage.src = "土台/B6238857-4BE2-4573-8AEF-009ED34BC525.PNG";
+groundImage.src = "土台/74ADF095-B515-4049-880D-3EBD290C653F.PNG";
 
 const PIECE_HEIGHT = 100; // ゲーム内でのおおよその高さ(px)。写真ごとに幅はここから縦横比で決まる
 const MASK_GRID_STEP = 16; // 輪郭抽出用グリッドの間隔(元画像のpx単位) : 小さいほど輪郭が精細だが重くなる
@@ -469,8 +469,10 @@ function render() {
   const groundX = CANVAS_W / 2 - GROUND_W / 2;
   const groundBarY = GROUND_Y - 10;
   if (groundImageReady) {
-    // 当たり判定の面(groundBarY)は変えず、見た目だけ下方向に厚みを持たせてパンだと分かりやすくする
-    ctx.drawImage(groundImage, groundX, groundBarY, GROUND_W, 34);
+    // 画像の縦横比は変えず、土台の幅(GROUND_W)に合わせて高さを決める。
+    // 当たり判定の面(groundBarY)は変えず、そこを画像の上端にして下方向に伸ばす
+    const groundImgH = GROUND_W * (groundImage.naturalHeight / groundImage.naturalWidth);
+    ctx.drawImage(groundImage, groundX, groundBarY, GROUND_W, groundImgH);
   } else {
     ctx.fillStyle = "#e0b98c";
     ctx.fillRect(groundX, groundBarY, GROUND_W, 20);
