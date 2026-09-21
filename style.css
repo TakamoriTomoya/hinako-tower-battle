@@ -263,6 +263,12 @@ body {
   font-size: 18px;
 }
 
+.ctrl-btn-rotate {
+  width: 64px;
+  height: 44px;
+  font-size: 20px;
+}
+
 /* ---- 勝利画面 ---- */
 .gameover-overlay {
   position: absolute;

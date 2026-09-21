@@ -119,6 +119,8 @@ const homeBtn = document.getElementById("homeBtn");
 const leftBtn = document.getElementById("leftBtn");
 const rightBtn = document.getElementById("rightBtn");
 const dropBtn = document.getElementById("dropBtn");
+const rotateLeftBtn = document.getElementById("rotateLeftBtn");
+const rotateRightBtn = document.getElementById("rotateRightBtn");
 
 // ---- ゲーム状態 ----
 const STATE = { HOME: "home", AIMING: "aiming", DROPPING: "dropping", GAMEOVER: "gameover" };
@@ -132,6 +134,9 @@ let settleCounter = 0;
 let dropElapsedFrames = 0;
 let hasStartedFalling = false;
 let heldDirection = 0; // -1 left, 1 right, 0 none
+let aimAngle = 0; // 照準中の駒の回転角(ラジアン)
+
+const ROTATE_STEP = Math.PI / 4; // 1回押しで45度
 
 const FALLING_SPEED_THRESHOLD = 1.2; // これを一度でも超えたら「本当に落下し始めた」とみなす
 
@@ -147,7 +152,14 @@ function spawnPiece() {
   body.plugin = { color: PLAYER_COLORS[currentPlayer], typeId: currentType.id };
   World.add(engine.world, body);
   currentBody = body;
+  aimAngle = 0;
   updateTurnLabel();
+}
+
+function rotateAim(direction) {
+  if (state !== STATE.AIMING || !currentBody) return;
+  aimAngle += direction * ROTATE_STEP;
+  Body.setAngle(currentBody, aimAngle);
 }
 
 function updateTurnLabel() {
@@ -242,6 +254,8 @@ rightBtn.addEventListener("pointerdown", () => (heldDirection = 1));
   rightBtn.addEventListener(ev, () => (heldDirection = 0));
 });
 dropBtn.addEventListener("click", dropPiece);
+rotateLeftBtn.addEventListener("click", () => rotateAim(-1));
+rotateRightBtn.addEventListener("click", () => rotateAim(1));
 startBtn.addEventListener("click", startBattle);
 restartBtn.addEventListener("click", startBattle);
 homeBtn.addEventListener("click", goHome);
@@ -253,6 +267,8 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     dropPiece();
   }
+  if (e.code === "KeyQ") rotateAim(-1);
+  if (e.code === "KeyE") rotateAim(1);
 });
 window.addEventListener("keyup", (e) => {
   if (e.code === "ArrowLeft" && heldDirection === -1) heldDirection = 0;
