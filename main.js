@@ -291,9 +291,11 @@ let settleCounter = 0;
 let dropElapsedFrames = 0;
 let hasStartedFalling = false;
 let heldDirection = 0; // -1 left, 1 right, 0 none
-let aimAngle = 0; // 照準中の駒の回転角(ラジアン)
+let aimAngle = 0; // 照準中の駒の目標回転角(ラジアン)
+let displayAngle = 0; // 実際に描画/物理に反映している回転角(目標角へ滑らかに近づける)
 
 const ROTATE_STEP = Math.PI / 6; // 1回押しで30度
+const ROTATE_SMOOTHING = 0.25; // 目標角に近づく速さ(大きいほど素早く追いつく)
 
 const FALLING_SPEED_THRESHOLD = 1.2; // これを一度でも超えたら「本当に落下し始めた」とみなす
 
@@ -312,13 +314,13 @@ function spawnPiece() {
   World.add(engine.world, body);
   currentBody = body;
   aimAngle = 0;
+  displayAngle = 0;
   updateTurnLabel();
 }
 
 function rotateAim(direction) {
   if (state !== STATE.AIMING || !currentBody) return;
   aimAngle += direction * ROTATE_STEP;
-  Body.setAngle(currentBody, aimAngle);
 }
 
 function updateTurnLabel() {
@@ -484,6 +486,11 @@ function loop(now) {
       let x = currentBody.position.x + heldDirection * MOVE_SPEED;
       x = Math.max(30, Math.min(CANVAS_W - 30, x));
       Body.setPosition(currentBody, { x, y: SPAWN_Y });
+
+      // 目標角へ少しずつ近づけて回転を滑らかにする
+      displayAngle += (aimAngle - displayAngle) * ROTATE_SMOOTHING;
+      if (Math.abs(aimAngle - displayAngle) < 0.001) displayAngle = aimAngle;
+      Body.setAngle(currentBody, displayAngle);
     }
 
     // 1フレーム分をまとめて1回で計算すると、高速で落ちた駒が着地の瞬間に
