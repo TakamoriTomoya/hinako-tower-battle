@@ -18,8 +18,14 @@ const SETTLE_SPEED_EPS = 0.05;
 // 実時間だけ経過してタイムアウトが誤発動する(＝まだ空中の駒を着地扱いにしてしまう)のを防ぐため。
 const MAX_DROP_WAIT_FRAMES = 240; // 約4秒(60fps)相当
 const FALL_Y = CANVAS_H; // これを超えたら「落下」＝タワー崩壊
+// 高い位置から落ちるほど衝突時の速度が上がり、めり込み量が増えて
+// 補正で押し戻される瞬間が「跳ねた」ように見えてしまう。速度に上限をつけて防ぐ。
+const MAX_FALL_SPEED = 15;
 
 const PLAYER_COLORS = { 1: "#4a90d9", 2: "#e8615d" };
+
+// 弾まない(スーパーボールのような反発をなくす)・滑りにくい、硬い手触りにする
+const PIECE_MATERIAL = { restitution: 0, friction: 0.6, frictionStatic: 0.9 };
 
 // キャラクター（人物）の形状定義。
 // 画像を用意したらここに imageSrc を追加して描画を差し替える。
@@ -30,14 +36,14 @@ const CHARACTER_TYPES = [
     id: "square",
     label: "しかく",
     create(x, y) {
-      return Bodies.rectangle(x, y, 42, 42);
+      return Bodies.rectangle(x, y, 42, 42, PIECE_MATERIAL);
     },
   },
   {
     id: "circle",
     label: "まる",
     create(x, y) {
-      const body = Bodies.circle(x, y, 23);
+      const body = Bodies.circle(x, y, 23, PIECE_MATERIAL);
       // 真円は着地時のわずかな数値誤差でも自転を始め、摩擦でそのまま
       // 転がって横に逃げてしまう。回転だけを止めて「転がる」を防ぐ
       // (四角や人型はあえて回転させて倒れる=崩壊の面白さを残す)
@@ -49,14 +55,14 @@ const CHARACTER_TYPES = [
     id: "tall",
     label: "のっぽ",
     create(x, y) {
-      return Bodies.rectangle(x, y, 26, 66);
+      return Bodies.rectangle(x, y, 26, 66, PIECE_MATERIAL);
     },
   },
   {
     id: "wide",
     label: "ワイド",
     create(x, y) {
-      return Bodies.rectangle(x, y, 66, 26);
+      return Bodies.rectangle(x, y, 66, 26, PIECE_MATERIAL);
     },
   },
   {
@@ -66,8 +72,8 @@ const CHARACTER_TYPES = [
       const headR = 14;
       const torsoW = 30;
       const torsoH = 44;
-      const torso = Bodies.rectangle(x, y + headR + 2, torsoW, torsoH);
-      const head = Bodies.circle(x, y - torsoH / 2 - 2, headR);
+      const torso = Bodies.rectangle(x, y + headR + 2, torsoW, torsoH, PIECE_MATERIAL);
+      const head = Bodies.circle(x, y - torsoH / 2 - 2, headR, PIECE_MATERIAL);
       return Body.create({ parts: [torso, head] });
     },
   },
@@ -160,6 +166,14 @@ function dropPiece() {
 
 function getDynamicBodies() {
   return Composite.allBodies(engine.world).filter((b) => !b.isStatic);
+}
+
+function capFallSpeed() {
+  getDynamicBodies().forEach((b) => {
+    if (b.velocity.y > MAX_FALL_SPEED) {
+      Body.setVelocity(b, { x: b.velocity.x, y: MAX_FALL_SPEED });
+    }
+  });
 }
 
 function checkFallen() {
@@ -328,6 +342,7 @@ function loop(now) {
     }
 
     Engine.update(engine, delta);
+    capFallSpeed();
 
     if (checkFallen()) {
       endGame(currentPlayer);
