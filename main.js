@@ -293,7 +293,7 @@ let hasStartedFalling = false;
 let heldDirection = 0; // -1 left, 1 right, 0 none
 let aimAngle = 0; // 照準中の駒の回転角(ラジアン)
 
-const ROTATE_STEP = Math.PI / 4; // 1回押しで45度
+const ROTATE_STEP = Math.PI / 6; // 1回押しで30度
 
 const FALLING_SPEED_THRESHOLD = 1.2; // これを一度でも超えたら「本当に落下し始めた」とみなす
 
