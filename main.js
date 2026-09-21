@@ -106,10 +106,7 @@ World.add(engine.world, [ground]);
 // ---- DOM ----
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-const nextCanvas = document.getElementById("nextCanvas");
-const nextCtx = nextCanvas.getContext("2d");
 const turnLabel = document.getElementById("turnLabel");
-const heightValue = document.getElementById("heightValue");
 const gameOverOverlay = document.getElementById("gameOverOverlay");
 const gameOverTitle = document.getElementById("gameOverTitle");
 const restartBtn = document.getElementById("restartBtn");
@@ -144,7 +141,6 @@ function spawnPiece() {
   body.plugin = { color: PLAYER_COLORS[currentPlayer], typeId: currentType.id };
   World.add(engine.world, body);
   currentBody = body;
-  drawNextPreview();
   updateTurnLabel();
 }
 
@@ -190,21 +186,6 @@ function maxBodySpeed() {
 
 function checkSettled() {
   return maxBodySpeed() < SETTLE_SPEED_EPS;
-}
-
-function currentHeight() {
-  const bodies = getDynamicBodies();
-  if (bodies.length === 0) return 0;
-  let minY = Infinity;
-  bodies.forEach((b) => {
-    (b.parts.length > 1 ? b.parts.slice(1) : [b]).forEach((part) => {
-      const topY = part.circleRadius
-        ? part.position.y - part.circleRadius
-        : Math.min(...part.vertices.map((v) => v.y));
-      if (topY < minY) minY = topY;
-    });
-  });
-  return Math.max(0, Math.round(GROUND_Y - minY));
 }
 
 function endGame(loserPlayer) {
@@ -318,15 +299,6 @@ function render() {
   Composite.allBodies(engine.world)
     .filter((b) => b !== ground)
     .forEach((b) => drawBody(ctx, b));
-
-  heightValue.textContent = currentHeight();
-}
-
-function drawNextPreview() {
-  nextCtx.clearRect(0, 0, 60, 60);
-  const dummy = nextType.create(30, 30);
-  dummy.plugin = { color: PLAYER_COLORS[currentPlayer === 1 ? 2 : 1] };
-  drawBody(nextCtx, dummy);
 }
 
 // ---- メインループ ----

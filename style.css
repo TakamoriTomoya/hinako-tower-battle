@@ -117,23 +117,6 @@ body {
   filter: brightness(0.9);
 }
 
-.next-preview {
-  align-self: center;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--panel);
-  padding: 6px 12px;
-  border-radius: 10px;
-  font-weight: bold;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-#nextCanvas {
-  background: #f5f9ff;
-  border-radius: 8px;
-}
-
 .controls {
   display: flex;
   justify-content: center;
