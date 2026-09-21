@@ -11,7 +11,7 @@ Matter.Common.setDecomp(decomp);
 const CANVAS_W = 380;
 const CANVAS_H = 640;
 const GROUND_Y = CANVAS_H - 60;
-const GROUND_W = 200;
+const GROUND_W = 300;
 const SPAWN_Y = 70;
 const MOVE_SPEED = 4.5; // px / frame
 const SETTLE_FRAMES_NEEDED = 30; // 約0.5秒(60fps)
@@ -23,7 +23,7 @@ const MAX_DROP_WAIT_FRAMES = 240; // 約4秒(60fps)相当
 const FALL_Y = CANVAS_H; // これを超えたら「落下」＝タワー崩壊
 // 高い位置から落ちるほど衝突時の速度が上がり、めり込み量が増えて
 // 補正で押し戻される瞬間が「跳ねた」ように見えてしまう。速度に上限をつけて防ぐ。
-const MAX_FALL_SPEED = 15;
+const MAX_FALL_SPEED = 8;
 const PHYSICS_SUBSTEPS = 4; // 1描画フレームを何回に分けて物理計算するか
 
 // 弾まない(スーパーボールのような反発をなくす)・滑りにくい、硬い手触りにする。
@@ -244,7 +244,7 @@ const engine = Engine.create({
   positionIterations: 12, // デフォルト(6)より増やし、積み重なった駒がめり込んですり抜けるのを防ぐ
   velocityIterations: 8, // デフォルトは4
 });
-engine.gravity.y = 1;
+engine.gravity.y = 0.5; // 落下速度をゆっくりめにする
 // ほぼ止まった駒は完全に固定(スリープ)させる。これがないと着地後も
 // 計算誤差レベルのごく僅かな揺れが収束しきらず、駒がじわじわにじみ続けてしまう。
 engine.enableSleeping = true;
