@@ -13,8 +13,12 @@ interface Props {
 export function HomePage({ onStart }: Props): PageSlots {
   return {
     header: (
-      <div className="flex w-full justify-end px-6">
-        <VersionLabel />
+      <div className="grid w-full grid-cols-[30%_60%_10%] items-center px-6">
+        <div aria-hidden="true" />
+        <div aria-hidden="true" />
+        <div className="flex justify-center">
+          <VersionLabel />
+        </div>
       </div>
     ),
     center: (
