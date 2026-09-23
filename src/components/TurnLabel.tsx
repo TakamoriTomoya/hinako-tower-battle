@@ -3,7 +3,7 @@ import type { Player } from "../lib/engine";
 
 interface Props {
   player: Player;
-  localPlayer?: Player | null; // ローカル対戦(null)では「プレイヤー1の番」、オンライン対戦では「あなたの番」「あいての番」と出す
+  localPlayer?: Player | null; // null(ひとりで挑戦)では「プレイヤー1の番」、オンライン対戦では「あなたの番」「あいての番」と出す
 }
 
 export function TurnLabel({ player, localPlayer = null }: Props) {

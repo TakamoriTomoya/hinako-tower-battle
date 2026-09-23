@@ -1,4 +1,3 @@
-import { playerName } from "../lib/engine";
 import type { Player } from "../lib/engine";
 import { CenterSlot } from "../components/CenterSlot";
 import { GameOverControls } from "../components/GameOverControls";
@@ -9,12 +8,12 @@ interface Props {
   winner: Player | null;
   onHome: () => void;
   onRestart: () => void;
-  localPlayer: Player | null; // オンライン対戦での自分のプレイヤー(ローカル対戦ではnull)
+  localPlayer: Player | null; // オンライン対戦での自分のプレイヤー(ひとりで挑戦ではnull)
 }
 
-// オンライン対戦では名前ではなく、自分から見た勝ち負けを出す
+// ひとりで挑戦は勝ち負けが無いので「おわり」、オンライン対戦は自分から見た勝ち負けを出す
 function resultText(winner: Player, localPlayer: Player | null): string {
-  if (localPlayer === null) return `${playerName(winner)}の勝利`;
+  if (localPlayer === null) return "おわり";
   return winner === localPlayer ? "あなたの勝ち！" : "あなたの負け…";
 }
 

@@ -35,7 +35,7 @@ export function HomePage({ onStart, onStartOnline }: Props): PageSlots {
           className="pointer-events-auto w-full max-w-[280px] cursor-pointer rounded-full border-0 bg-green py-4 font-heading text-lg font-bold text-white shadow-[0_4px_0_var(--color-green-shadow)] transition-transform duration-100 hover:bg-green-hover active:scale-[0.96]"
           onClick={onStart}
         >
-          ローカルで対戦
+          ひとりで挑戦
         </button>
         <button
           type="button"

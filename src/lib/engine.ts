@@ -81,6 +81,7 @@ export interface EngineState {
   assetsReady: boolean; // 土台・駒の画像を全て読み込み終えたか(falseの間はローディング画面を出す)
   currentPieceName: string; // 今狙っている(落とそうとしている)駒の名前。駒がない時は空文字
   towerMoving: boolean; // 積んだ駒がまだ動いているか(trueの間は次の駒を落とせない)
+  stackedCount: number; // この対戦で積み上げた駒の個数(オンライン対戦では2人の合計)
 }
 
 export type EngineStateListener = (state: EngineState) => void;
@@ -205,6 +206,7 @@ export class TowerBattleEngine {
   private phase: EnginePhase = "home";
   private currentPlayer: Player = 1;
   private winner: Player | null = null;
+  private stackedCount = 0;
   private currentBody: PieceBody | null = null;
   private settleCounter = 0;
   private dropElapsedFrames = 0;
@@ -239,6 +241,7 @@ export class TowerBattleEngine {
     rerollsRemaining: number;
     currentPieceName: string;
     towerMoving: boolean;
+    stackedCount: number;
   } | null = null;
   private guestPrevBodies: SnapshotBody[] = [];
   private guestLatestBodies: SnapshotBody[] = [];
@@ -358,8 +361,10 @@ export class TowerBattleEngine {
   startBattle(): void {
     this.clearWorld();
     this.rematchReady = { 1: false, 2: false };
-    this.currentPlayer = Math.random() < 0.5 ? 1 : 2; // 先攻/後攻は毎回ランダム
+    // オンライン対戦は先攻/後攻を毎回ランダムに。ひとりで挑戦はプレイヤー1だけで続ける
+    this.currentPlayer = this.network ? (Math.random() < 0.5 ? 1 : 2) : 1;
     this.winner = null;
+    this.stackedCount = 0;
     this.rerollsRemaining = { 1: REROLL_LIMIT, 2: REROLL_LIMIT };
     this.phase = "aiming";
     this.spawnPiece();
@@ -475,6 +480,7 @@ export class TowerBattleEngine {
     }
     this.currentPlayer = snapshot.turnPlayer;
     this.winner = snapshot.winner;
+    this.stackedCount = snapshot.stackedCount ?? 0;
     this.rerollsRemaining = snapshot.rerollsByPlayer
       ? { 1: snapshot.rerollsByPlayer.p1, 2: snapshot.rerollsByPlayer.p2 }
       : { 1: REROLL_LIMIT, 2: REROLL_LIMIT };
@@ -620,6 +626,7 @@ export class TowerBattleEngine {
       rerollsByPlayer: { p1: this.rerollsRemaining[1], p2: this.rerollsRemaining[2] },
       currentPieceName: this.currentBody?.plugin.piece.name ?? "",
       towerMoving: this.towerMoving,
+      stackedCount: this.stackedCount,
       currentBodyId: this.phase === "aiming" ? (this.currentBody?.plugin.id ?? null) : null,
       bodies,
     });
@@ -635,6 +642,7 @@ export class TowerBattleEngine {
       rerollsRemaining: snapshot.rerollsRemaining,
       currentPieceName: snapshot.currentPieceName,
       towerMoving: snapshot.towerMoving ?? false,
+      stackedCount: snapshot.stackedCount ?? 0,
     };
     this.phase = snapshot.phase;
     this.currentPlayer = snapshot.turnPlayer;
@@ -748,6 +756,7 @@ export class TowerBattleEngine {
       assetsReady: this.assetsReady,
       currentPieceName: this.currentBody?.plugin.piece.name ?? "",
       towerMoving: this.towerMoving,
+      stackedCount: this.stackedCount,
     });
   }
 
@@ -828,8 +837,10 @@ export class TowerBattleEngine {
     this.emit();
   }
 
+  // 落とした駒が落ち着いた(=積めた)時に呼ばれる
   private nextTurn(): void {
-    this.currentPlayer = this.currentPlayer === 1 ? 2 : 1;
+    this.stackedCount++;
+    if (this.network) this.currentPlayer = this.currentPlayer === 1 ? 2 : 1;
     this.phase = "aiming";
     this.spawnPiece();
   }

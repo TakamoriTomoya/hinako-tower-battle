@@ -25,6 +25,7 @@ function App() {
     assetsReady,
     currentPieceName,
     towerMoving,
+    stackedCount,
     actions,
   } = useTowerBattleEngine();
 
@@ -151,6 +152,7 @@ function App() {
                   rerollsRemaining,
                   currentPieceName,
                   towerMoving,
+                  stackedCount,
                   onRotateStart: actions.startRotating,
                   onRotateEnd: actions.stopRotating,
                   onReroll: actions.rerollPiece,
