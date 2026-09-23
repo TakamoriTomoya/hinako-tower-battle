@@ -11,16 +11,18 @@ export interface PieceImageDef {
 }
 
 export const PIECE_IMAGE_FILES: PieceImageDef[] = [
-  { file: "boy-hinako.PNG", name: "しょうねんひなこ", sizeScale: 0.8 },
-  { file: "dance-hinako.PNG", name: "だんすひなこ", sizeScale: 0.9 },
-  { file: "goo-hinako.PNG", name: "ぐぅーひなこ", sizeScale: 0.8 },
-  { file: "gyaku-hinako.PNG", name: "ぎゃくぅひなこ", sizeScale: 1.4 },
-  { file: "lego-hinako.PNG", name: "れごひなこ", sizeScale: 1.2 },
+  { file: "boy-hinako.PNG", name: "しょうねんひなこ", sizeScale: 1.2 },
+  { file: "dance-hinako.PNG", name: "だんすひなこ", sizeScale: 1.1 },
+  // { file: "goo-hinako.PNG", name: "ぐぅーひなこ", sizeScale: 0.6 },
+  { file: "gorori-hinako.PNG", name: "ごろりひなこ", sizeScale: 1.0 },
+  { file: "gyaku-hinako.PNG", name: "ぎゃくぅひなこ", sizeScale: 1.6 },
+  { file: "lego-hinako.PNG", name: "れごひなこ", sizeScale: 1.4 },
   { file: "mouhu-hinako.PNG", name: "もうふひなこ", sizeScale: 0.8 },
-  { file: "neko-hinako.PNG", name: "ねこひなこ", sizeScale: 0.4 },
-  { file: "panpan-hinako.PNG", name: "ぱんぱんひなこ", sizeScale: 0.8 },
-  { file: "red-hinako.PNG", name: "あかひなこ", sizeScale: 1.0 },
+  { file: "neko-hinako.PNG", name: "ねこひなこ", sizeScale: 0.7 },
+  // { file: "panpan-hinako.PNG", name: "ぱんぱんひなこ", sizeScale: 1.2 },
+  // { file: "red-hinako.PNG", name: "あかひなこ", sizeScale: 1.2 },
   { file: "sit-hinako.PNG", name: "おすわりひなこ", sizeScale: 0.8 },
-  { file: "sorori-hinako.PNG", name: "そろりひなこ", sizeScale: 0.9 },
-  { file: "yazirusi-hinako.PNG", name: "やじるしひなこ", sizeScale: 1.4 },
+  // { file: "sorori-hinako.PNG", name: "そろりひなこ", sizeScale: 1.2 },
+  { file: "tako-hinako.PNG", name: "たこひなこ", sizeScale: 1.0 },
+  // { file: "yazirusi-hinako.PNG", name: "やじるしひなこ", sizeScale: 1.4 },
 ];

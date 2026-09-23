@@ -9,13 +9,19 @@ interface Props {
   winner: Player | null;
   onHome: () => void;
   onRestart: () => void;
-  canRestart?: boolean; // オンライン対戦のゲスト側では、再戦はホストのみが行える
+  localPlayer: Player | null; // オンライン対戦での自分のプレイヤー(ローカル対戦ではnull)
 }
 
-export function ResultPage({ winner, onHome, onRestart, canRestart = true }: Props): PageSlots {
+// オンライン対戦では名前ではなく、自分から見た勝ち負けを出す
+function resultText(winner: Player, localPlayer: Player | null): string {
+  if (localPlayer === null) return `${playerName(winner)}の勝利`;
+  return winner === localPlayer ? "あなたの勝ち！" : "あなたの負け…";
+}
+
+export function ResultPage({ winner, onHome, onRestart, localPlayer }: Props): PageSlots {
   return {
     header: <BackButton onClick={onHome} />,
-    center: winner && <CenterSlot>{playerName(winner)}の勝利</CenterSlot>,
-    bottom: canRestart ? <GameOverControls onRestart={onRestart} /> : null,
+    center: winner && <CenterSlot>{resultText(winner, localPlayer)}</CenterSlot>,
+    bottom: <GameOverControls onRestart={onRestart} />,
   };
 }

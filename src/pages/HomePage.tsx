@@ -32,14 +32,14 @@ export function HomePage({ onStart, onStartOnline }: Props): PageSlots {
       <div className="flex w-full -translate-y-12 flex-col items-center gap-4 px-6">
         <button
           type="button"
-          className="pointer-events-auto w-full max-w-[280px] cursor-pointer rounded-full border-0 bg-primary py-4 font-heading text-lg font-bold text-white shadow-[0_4px_0_var(--color-primary-shadow)] transition-transform duration-100 hover:bg-primary-hover active:scale-[0.96]"
+          className="pointer-events-auto w-full max-w-[280px] cursor-pointer rounded-full border-0 bg-green py-4 font-heading text-lg font-bold text-white shadow-[0_4px_0_var(--color-green-shadow)] transition-transform duration-100 hover:bg-green-hover active:scale-[0.96]"
           onClick={onStart}
         >
           ローカルで対戦
         </button>
         <button
           type="button"
-          className="pointer-events-auto w-full max-w-[280px] cursor-pointer rounded-full border-0 bg-secondary py-4 font-heading text-lg font-bold text-text-dark shadow-[0_4px_0_var(--color-secondary-shadow)] transition-transform duration-100 hover:bg-secondary-hover active:scale-[0.96]"
+          className="pointer-events-auto w-full max-w-[280px] cursor-pointer rounded-full border-0 bg-lime py-4 font-heading text-lg font-bold text-white shadow-[0_4px_0_var(--color-lime-shadow)] transition-transform duration-100 hover:bg-lime-hover active:scale-[0.96]"
           onClick={onStartOnline}
         >
           オンラインで対戦

@@ -1,3 +1,5 @@
+import { RotateIcon } from "./icons";
+
 interface Props {
   onRotateStart: () => void;
   onRotateEnd: () => void;
@@ -16,7 +18,7 @@ export function RotateControls({ onRotateStart, onRotateEnd }: Props) {
         onPointerLeave={onRotateEnd}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <span className="text-xl leading-none">↻</span>
+        <RotateIcon size={20} />
         <span>回転</span>
       </button>
     </div>

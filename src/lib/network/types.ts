@@ -22,7 +22,9 @@ export interface Snapshot {
   winner: Player | null;
   remainingSeconds: number;
   rerollsRemaining: number;
+  rerollsByPlayer: { p1: number; p2: number }; // ホストが抜けて入り直した時に両者の残り回数を復元するため
   currentPieceName: string;
+  towerMoving?: boolean; // 積んだ駒がまだ動いているか(trueの間はゲストも落とせない)。古いホストは送らないので省略可
   currentBodyId: number | null; // 狙い中の駒のID(aiming以外はnull)。ゲストが手元で動かす駒の特定に使う
   bodies: SnapshotBody[]; // 土台は含めない(ゲストはローカルの土台画像をそのまま描く)
 }
@@ -36,15 +38,13 @@ export interface Snapshot {
 export type RemoteInputPayload =
   | { type: "aim"; id: number; x: number; angle: number }
   | { type: "drop"; id: number; x: number; angle: number }
-  | { type: "reroll" };
+  | { type: "reroll" }
+  | { type: "restart" }; // 決着後、ゲストが「もう一度」を押した(ホストも押していれば次の対戦が始まる)
 
 export type RemoteInputEvent = RemoteInputPayload & { seq: number };
 
 export type RoomErrorReason =
-  | "not-found" // 合言葉に一致する部屋がない(参加時)
-  | "already-exists" // 同じ合言葉の部屋が既に稼働中(作成時)
-  | "full" // 既にゲストが入っている部屋への参加
-  | "disconnected" // 対戦中に相手の接続が切れた
+  | "full" // 同じ合言葉で既に2人が揃っている
   | "unknown";
 
 export class RoomError extends Error {

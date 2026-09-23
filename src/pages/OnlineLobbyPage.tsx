@@ -1,69 +1,49 @@
-import { BackButton } from "../components/BackButton";
+import { CloseIcon } from "../components/icons";
 import type { PageSlots } from "../components/BasePage";
 import type { OnlineRoomStatus } from "../hooks/useOnlineRoom";
 
 interface Props {
   status: OnlineRoomStatus;
   passphrase: string;
+  history: string[]; // 直近に使った合言葉(新しい順)
   onPassphraseChange: (value: string) => void;
-  onCreate: () => void;
-  onJoin: () => void;
+  onMatch: () => void;
   onBack: () => void; // 入力前の状態でホームへ戻る/やり直す
 }
 
 const panelClass =
   "pointer-events-auto absolute top-1/2 left-1/2 w-[280px] -translate-x-1/2 -translate-y-1/2 rounded-[24px] bg-bg-cream/95 px-6 py-7 text-center shadow-[0_6px_0_rgba(0,0,0,0.08)]";
 
+const closeButtonClass =
+  "absolute top-3 right-3 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-text-light transition-transform duration-100 hover:bg-black/5 active:scale-[0.9]";
+
 const inputClass =
   "w-full rounded-[14px] border-2 border-frame-yellow bg-white px-4 py-3 text-center font-body text-base text-text-dark outline-none focus:border-secondary";
 
 const primaryButtonClass =
-  "w-full cursor-pointer rounded-[18px] border-0 bg-primary px-4 py-3 font-heading text-base font-bold text-white shadow-[0_4px_0_var(--color-primary-shadow)] transition-transform duration-100 hover:bg-primary-hover active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50";
+  "w-full cursor-pointer rounded-[18px] border-0 bg-green px-4 py-3 font-heading text-base font-bold text-white shadow-[0_4px_0_var(--color-green-shadow)] transition-transform duration-100 hover:bg-green-hover active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50";
 
-const secondaryButtonClass =
-  "w-full cursor-pointer rounded-[18px] border-0 bg-ghost-bg px-4 py-3 font-heading text-base font-bold text-ghost-text shadow-[0_4px_0_var(--color-ghost-shadow)] transition-transform duration-100 hover:bg-ghost-hover active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50";
+const historyChipClass =
+  "max-w-full cursor-pointer truncate rounded-full border-2 border-frame-yellow bg-white px-3 py-1 font-body text-sm text-text-dark transition-transform duration-100 active:scale-[0.95]";
 
-export function OnlineLobbyPage({ status, passphrase, onPassphraseChange, onCreate, onJoin, onBack }: Props): PageSlots {
+export function OnlineLobbyPage(props: Props): PageSlots {
   return {
-    header: <BackButton onClick={onBack} />,
-    center: <div className={panelClass}>{renderBody(status, passphrase, onPassphraseChange, onCreate, onJoin, onBack)}</div>,
+    center: (
+      <div className={panelClass}>
+        {/* ばつボタン: 部屋を抜けてホームへ戻る */}
+        <button type="button" className={closeButtonClass} aria-label="とじる" onClick={props.onBack}>
+          <CloseIcon size={18} />
+        </button>
+        {renderBody(props)}
+      </div>
+    ),
   };
 }
 
-function renderBody(
-  status: OnlineRoomStatus,
-  passphrase: string,
-  onPassphraseChange: (value: string) => void,
-  onCreate: () => void,
-  onJoin: () => void,
-  onBack: () => void,
-) {
+function renderBody({ status, passphrase, history, onPassphraseChange, onMatch, onBack }: Props) {
   switch (status.step) {
-    case "creating":
-      return <StatusMessage title="部屋を作っています…" />;
-    case "joining":
-      return <StatusMessage title="部屋に入っています…" />;
     case "connected":
       return <StatusMessage title="つながりました！" />;
-    case "waiting-for-guest":
-      return (
-        <>
-          <p className="mb-2 font-heading text-lg font-bold text-text-dark">相手の入室を待っています…</p>
-          <p className="mb-5 text-sm text-text-light">合言葉「{passphrase}」を相手に伝えてください</p>
-          <button type="button" className={secondaryButtonClass} onClick={onBack}>
-            やめる
-          </button>
-        </>
-      );
-    case "disconnected":
-      return (
-        <>
-          <p className="mb-5 font-heading text-base font-bold text-text-dark">相手との接続が切れました</p>
-          <button type="button" className={primaryButtonClass} onClick={onBack}>
-            ホームへ戻る
-          </button>
-        </>
-      );
     case "error":
       return (
         <>
@@ -87,14 +67,21 @@ function renderBody(
             onChange={(e) => onPassphraseChange(e.target.value)}
             maxLength={30}
           />
-          <div className="flex flex-col gap-3">
-            <button type="button" className={primaryButtonClass} onClick={onCreate} disabled={!passphrase.trim()}>
-              部屋を作る
-            </button>
-            <button type="button" className={secondaryButtonClass} onClick={onJoin} disabled={!passphrase.trim()}>
-              部屋に入る
-            </button>
-          </div>
+          <button type="button" className={primaryButtonClass} onClick={onMatch} disabled={!passphrase.trim()}>
+            対戦する
+          </button>
+          {history.length > 0 && (
+            <div className="mt-5">
+              <p className="mb-2 text-xs text-text-light">最近の合言葉</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {history.map((p) => (
+                  <button key={p} type="button" className={historyChipClass} onClick={() => onPassphraseChange(p)}>
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       );
   }

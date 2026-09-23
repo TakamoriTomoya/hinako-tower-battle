@@ -21,12 +21,12 @@ export function LoadingOverlay({ ready }: Props) {
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-play-sky transition-opacity ease-out ${
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-cheese transition-opacity ease-out ${
         ready ? "pointer-events-none opacity-0" : "opacity-100"
       }`}
       style={{ transitionDuration: `${FADE_OUT_MS}ms` }}
     >
-      <span className="animate-pulse font-heading text-lg font-bold text-white">よみこみちゅう…</span>
+      <span className="animate-pulse font-heading text-lg font-bold text-white text-outline">よみこみちゅう…</span>
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import { RestartIcon } from "./icons";
+
 interface Props {
   onRestart: () => void;
 }
@@ -11,7 +13,7 @@ export function GameOverControls({ onRestart }: Props) {
         aria-label="もう一度あそぶ"
         onClick={onRestart}
       >
-        <span className="text-xl leading-none">↻</span>
+        <RestartIcon size={20} />
         <span>もう一度</span>
       </button>
     </div>
