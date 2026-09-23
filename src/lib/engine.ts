@@ -91,7 +91,6 @@ export class TowerBattleEngine {
   private displayAngle = 0;
   private viewScale = 1;
   private currentSpawnY = SPAWN_Y_BASE;
-  private groundTopSurfaceY = GROUND_Y - 10; // 土台の実際の見た目の上面(輪郭確定前の仮値)
 
   private isDraggingPiece = false;
   private dragStartClientX = 0;
@@ -321,7 +320,6 @@ export class TowerBattleEngine {
     const flatTop = Bodies.rectangle(worldX, topY + 5, GROUND_W * 0.7, 10);
     const outlineParts = outlineBody.parts.length > 1 ? outlineBody.parts.slice(1) : [outlineBody];
     const shapedGround = Body.create({ parts: [...outlineParts, flatTop], isStatic: true });
-    this.groundTopSurfaceY = topY;
 
     World.remove(this.engine.world, this.ground);
     World.add(this.engine.world, shapedGround);
