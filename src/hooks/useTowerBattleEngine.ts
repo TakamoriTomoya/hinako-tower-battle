@@ -1,6 +1,7 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TowerBattleEngine, type EngineState, type Player } from "../lib/engine";
 import { AIM_TIME_LIMIT_MS, REROLL_LIMIT } from "../lib/constants";
+import type { RoomSync } from "../lib/network/roomSync";
 
 export function useTowerBattleEngine() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -33,6 +34,24 @@ export function useTowerBattleEngine() {
   const startRotating = useCallback(() => engineRef.current?.startRotating(), []);
   const stopRotating = useCallback(() => engineRef.current?.stopRotating(), []);
   const rerollPiece = useCallback(() => engineRef.current?.rerollPiece(), []);
+  const attachOnlineHost = useCallback((sync: RoomSync) => engineRef.current?.attachOnlineHost(sync), []);
+  const attachOnlineGuest = useCallback((sync: RoomSync) => engineRef.current?.attachOnlineGuest(sync), []);
+  const detachOnline = useCallback(() => engineRef.current?.detachOnline(), []);
+
+  // useEffect依存配列でactions全体を使えるよう、参照を安定させる(各関数自体は常にstableなので依存配列は空でよい)
+  const actions = useMemo(
+    () => ({
+      startBattle,
+      goHome,
+      startRotating,
+      stopRotating,
+      rerollPiece,
+      attachOnlineHost,
+      attachOnlineGuest,
+      detachOnline,
+    }),
+    [startBattle, goHome, startRotating, stopRotating, rerollPiece, attachOnlineHost, attachOnlineGuest, detachOnline],
+  );
 
   return {
     canvasRef,
@@ -43,6 +62,6 @@ export function useTowerBattleEngine() {
     rerollsRemaining: state.rerollsRemaining,
     assetsReady: state.assetsReady,
     currentPieceName: state.currentPieceName,
-    actions: { startBattle, goHome, startRotating, stopRotating, rerollPiece },
+    actions,
   };
 }

@@ -58,6 +58,14 @@ export const TAP_MAX_DISTANCE = 6; // これ以下の移動量ならタップ扱
 
 export const PLAYER_NAMES: Record<1 | 2, string> = { 1: "ともや", 2: "ひなこ" };
 
+// オンライン対戦: ホストが物理演算のスナップショットをゲストへ配信する間隔(ms)。
+// 短くするほど滑らかだがFirebaseへの書き込み回数が増える。20Hz程度で見た目には十分滑らか。
+export const NETWORK_BROADCAST_INTERVAL_MS = 50;
+
+// オンライン対戦: ゲスト側のドラッグ操作を左右移動の方向に変換する際の不感帯(px)。
+// タップ判定(TAP_MAX_DISTANCE)よりわずかに大きくし、タップのブレで誤って移動扱いにしない。
+export const GUEST_DRAG_DEAD_ZONE = 10;
+
 export const GROUND_IMAGE_SRC =
   "/ground/74ADF095-B515-4049-880D-3EBD290C653F.PNG";
 
