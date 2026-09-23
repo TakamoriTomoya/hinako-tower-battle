@@ -28,7 +28,6 @@ import {
   SETTLE_SPEED_EPS,
   SPAWN_CLEARANCE,
   SPAWN_Y_BASE,
-  SPAWN_Y_MIN,
   TAP_MAX_DISTANCE,
   VIEW_TOP_MARGIN,
   VIEW_ZOOM_SMOOTHING,
@@ -326,12 +325,15 @@ export class TowerBattleEngine {
     this.ground = shapedGround;
   }
 
-  // タワーの一番高い場所に合わせてスポーン位置を決める(タワーが空ならSPAWN_Y_BASE)
+  // タワーの一番高い場所に合わせてスポーン位置を決める(タワーが空ならSPAWN_Y_BASE)。
+  // 上限を設けず青天井で上げる: これより上には出さないという下限クランプを入れると、
+  // タワーがそれを追い越した時にスポーン位置と山が画面上で重なってしまう。
+  // 代わりに、画面に収まらなくなった分はcomputeTargetViewScaleが自動でズームアウトして吸収する。
   private computeSpawnY(): number {
     const bodies = Composite.allBodies(this.engine.world).filter((b) => b !== this.ground);
     if (bodies.length === 0) return SPAWN_Y_BASE;
     const towerTopY = Math.min(...bodies.map((b) => b.bounds.min.y));
-    return Math.max(SPAWN_Y_MIN, Math.min(SPAWN_Y_BASE, towerTopY - SPAWN_CLEARANCE));
+    return Math.min(SPAWN_Y_BASE, towerTopY - SPAWN_CLEARANCE);
   }
 
   private spawnPiece(): void {
