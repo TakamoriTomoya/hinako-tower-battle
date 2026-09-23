@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickRandomPiece, type Piece } from "./pieces";
+import { PieceBag, pickRandomPiece, type Piece } from "./pieces";
 
 function makePiece(overrides: Partial<Piece>): Piece {
   return {
@@ -9,6 +9,7 @@ function makePiece(overrides: Partial<Piece>): Piece {
     sizeScale: 1,
     ready: false,
     hullLocal: null,
+    convexParts: null,
     w: 0,
     h: 0,
     imageOffsetX: 0,
@@ -44,5 +45,29 @@ describe("pickRandomPiece", () => {
     for (let i = 0; i < 20; i++) {
       expect(pickRandomPiece([readyNoHull, readyWithHull])).toBe(readyWithHull);
     }
+  });
+});
+
+describe("PieceBag", () => {
+  const pieces = ["a", "b", "c", "d"].map((src) => makePiece({ src, ready: true, hullLocal: [{ x: 0, y: 0 }] }));
+
+  it("一通り出し切るまで同じ駒を出さず、袋をまたいでも連続しない", () => {
+    const bag = new PieceBag();
+    let last: string | undefined;
+    for (let round = 0; round < 50; round++) {
+      const seen = new Set<string>();
+      for (let i = 0; i < pieces.length; i++) {
+        const p = bag.next(pieces, last);
+        expect(p.src).not.toBe(last);
+        seen.add(p.src);
+        last = p.src;
+      }
+      expect(seen.size).toBe(pieces.length);
+    }
+  });
+
+  it("選べる駒が1種類だけならそれを返す", () => {
+    const bag = new PieceBag();
+    expect(bag.next([pieces[0]], "a")).toBe(pieces[0]);
   });
 });

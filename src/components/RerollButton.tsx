@@ -1,3 +1,5 @@
+import { ShuffleIcon } from "./icons";
+
 interface Props {
   remaining: number;
   onClick: () => void;
@@ -12,7 +14,7 @@ export function RerollButton({ remaining, onClick }: Props) {
       aria-label="落とすキャラをランダムに変更"
       onClick={onClick}
     >
-      <span className="text-xl leading-none">⇄</span>
+      <ShuffleIcon size={20} />
       <span>{remaining}</span>
     </button>
   );

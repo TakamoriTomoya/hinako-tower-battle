@@ -5,9 +5,12 @@ import { HomePage } from "./pages/HomePage";
 import { BattlePage } from "./pages/BattlePage";
 import { ResultPage } from "./pages/ResultPage";
 import { OnlineLobbyPage } from "./pages/OnlineLobbyPage";
+import { OnlineWaitingPage } from "./pages/OnlineWaitingPage";
+import { PeerAwayNotice } from "./components/PeerAwayNotice";
 import { useTowerBattleEngine } from "./hooks/useTowerBattleEngine";
 import { useOnlineRoom } from "./hooks/useOnlineRoom";
 import type { RoomRole } from "./lib/network/types";
+import { loadPassphraseHistory, savePassphraseToHistory } from "./lib/passphraseHistory";
 
 type AppMode = "menu" | "online-lobby";
 
@@ -21,13 +24,17 @@ function App() {
     rerollsRemaining,
     assetsReady,
     currentPieceName,
+    towerMoving,
     actions,
   } = useTowerBattleEngine();
 
   const room = useOnlineRoom();
   const [appMode, setAppMode] = useState<AppMode>("menu");
   const [passphrase, setPassphrase] = useState("");
+  const [passphraseHistory, setPassphraseHistory] = useState<string[]>(loadPassphraseHistory);
   const [onlineRole, setOnlineRole] = useState<RoomRole | null>(null);
+  // オンライン対戦の決着後に自分が「もう一度」を押し、相手が押すのを待っている間true
+  const [rematchWaiting, setRematchWaiting] = useState(false);
 
   // 部屋にホスト・ゲストが揃ったら、実際の対戦(engine)側へ接続を渡して開始する
   useEffect(() => {
@@ -35,8 +42,13 @@ function App() {
     const sync = room.sync.current;
     if (!sync) return;
     if (room.status.role === "host") {
-      actions.attachOnlineHost(sync);
-      actions.startBattle();
+      if (sync.restoredSnapshot) {
+        // 対戦の途中で抜けたホストが入り直した: 抜ける直前の状態から再開する
+        actions.restoreOnlineHost(sync, sync.restoredSnapshot);
+      } else {
+        actions.attachOnlineHost(sync);
+        actions.startBattle();
+      }
     } else {
       actions.attachOnlineGuest(sync);
     }
@@ -44,19 +56,37 @@ function App() {
     setAppMode("menu");
   }, [room.status, room.sync, actions]);
 
+  // 相手が抜けても対戦は続け、入り直してくるのを待つ(ホストは相手の手番の制限時間を止める)
+  useEffect(() => {
+    actions.setPeerPresent(room.peerPresent);
+  }, [room.peerPresent, actions]);
+
+  // 次の対戦が始まった(またはホームへ戻った)ら待機を終える
+  useEffect(() => {
+    if (phase !== "gameover") setRematchWaiting(false);
+  }, [phase]);
+
+  // ゲスト: 待っている間にホストが抜けて入り直すと押したことが消えるので、戻ってきたら伝え直す
+  useEffect(() => {
+    if (rematchWaiting && onlineRole === "guest" && room.peerPresent) actions.requestRematch();
+  }, [rematchWaiting, onlineRole, room.peerPresent, actions]);
+
   const handleStartOnline = useCallback(() => {
-    setPassphrase("");
+    // 直近に使った合言葉を初期値にして、同じ相手とすぐ遊び直せるようにする
+    setPassphrase(passphraseHistory[0] ?? "");
     room.reset();
     setAppMode("online-lobby");
-  }, [room]);
+  }, [room, passphraseHistory]);
 
   const handleLobbyBack = useCallback(() => {
     room.leaveRoom();
     setAppMode("menu");
   }, [room]);
 
-  const handleCreateRoom = useCallback(() => room.createRoom(passphrase), [room, passphrase]);
-  const handleJoinRoom = useCallback(() => room.joinRoom(passphrase), [room, passphrase]);
+  const handleMatchRoom = useCallback(() => {
+    setPassphraseHistory(savePassphraseToHistory(passphrase));
+    void room.matchRoom(passphrase);
+  }, [room, passphrase]);
 
   const handleGoHome = useCallback(() => {
     if (onlineRole) {
@@ -68,53 +98,76 @@ function App() {
   }, [onlineRole, actions, room]);
 
   const handleRestart = useCallback(() => {
-    // オンライン対戦の再戦はホストのみが開始できる(ゲスト側は再戦ボタン自体を出さない)
-    actions.startBattle();
-  }, [actions]);
+    if (onlineRole === null) {
+      actions.startBattle();
+      return;
+    }
+    // オンライン対戦は、部屋に入った時と同じく相手も押すまで待ってから始める
+    actions.requestRematch();
+    setRematchWaiting(true);
+  }, [onlineRole, actions]);
 
-  // 対戦中に相手の接続が切れた場合は、フェーズに関わらず切断画面を出す
-  const peerDisconnected = onlineRole !== null && room.status.step === "disconnected";
+  const peerAway = onlineRole !== null && !room.peerPresent;
+  const localPlayer = onlineRole === null ? null : onlineRole === "host" ? 1 : 2;
 
-  const slots = peerDisconnected
-    ? OnlineLobbyPage({
-        status: room.status,
-        passphrase,
-        onPassphraseChange: setPassphrase,
-        onCreate: handleCreateRoom,
-        onJoin: handleJoinRoom,
-        onBack: handleGoHome,
-      })
-    : appMode === "online-lobby"
-      ? OnlineLobbyPage({
-          status: room.status,
-          passphrase,
-          onPassphraseChange: setPassphrase,
-          onCreate: handleCreateRoom,
-          onJoin: handleJoinRoom,
+  const isWaitingForPeer = room.status.step === "matching" || room.status.step === "waiting-for-peer";
+
+  const slots =
+    appMode === "online-lobby" && isWaitingForPeer
+      ? OnlineWaitingPage({
+          message: `合言葉「${passphrase}」で相手を待っています`,
           onBack: handleLobbyBack,
         })
-      : phase === "home"
-        ? HomePage({ onStart: actions.startBattle, onStartOnline: handleStartOnline })
-        : phase === "gameover"
-          ? ResultPage({
-              winner,
-              onHome: handleGoHome,
-              onRestart: handleRestart,
-              canRestart: onlineRole !== "guest",
+      : appMode === "online-lobby"
+        ? OnlineLobbyPage({
+            status: room.status,
+            passphrase,
+            history: passphraseHistory,
+            onPassphraseChange: setPassphrase,
+            onMatch: handleMatchRoom,
+            onBack: handleLobbyBack,
+          })
+        : phase === "home"
+          ? HomePage({
+              onStart: actions.startBattle,
+              onStartOnline: handleStartOnline,
             })
-          : BattlePage({
-              turnPlayer,
-              remainingSeconds,
-              rerollsRemaining,
-              currentPieceName,
-              onRotateStart: actions.startRotating,
-              onRotateEnd: actions.stopRotating,
-              onReroll: actions.rerollPiece,
-            });
+          : phase === "gameover" && rematchWaiting
+            ? OnlineWaitingPage({
+                message: "相手が「もう一度」を押すのを待っています",
+                onBack: handleGoHome,
+              })
+            : phase === "gameover"
+              ? ResultPage({
+                  winner,
+                  onHome: handleGoHome,
+                  onRestart: handleRestart,
+                  localPlayer,
+                })
+              : BattlePage({
+                  turnPlayer,
+                  localPlayer,
+                  remainingSeconds,
+                  rerollsRemaining,
+                  currentPieceName,
+                  towerMoving,
+                  onRotateStart: actions.startRotating,
+                  onRotateEnd: actions.stopRotating,
+                  onReroll: actions.rerollPiece,
+                });
 
   return (
     <>
-      <BasePage canvasRef={canvasRef} {...slots} />
+      <BasePage
+        canvasRef={canvasRef}
+        {...slots}
+        center={
+          <>
+            {slots.center}
+            {peerAway && <PeerAwayNotice />}
+          </>
+        }
+      />
       <LoadingOverlay ready={assetsReady} />
     </>
   );

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">
+<!-- チーズ柄の背景タイル(穴の位置は一度ランダムに決めて固定) -->
+<rect width="320" height="320" fill="#ffe38a"/>
+<ellipse cx="77.5" cy="289.0" rx="17.3" ry="14.1" fill="#f2c25e"/>
+<ellipse cx="79.5" cy="291.0" rx="14.8" ry="11.9" fill="#f9d273"/>
+<ellipse cx="74.3" cy="157.3" rx="28.1" ry="24.2" fill="#f2c25e"/>
+<ellipse cx="77.6" cy="160.7" rx="24.1" ry="20.4" fill="#f9d273"/>
+<ellipse cx="298.1" cy="254.2" rx="8.6" ry="7.5" fill="#f2c25e"/>
+<ellipse cx="299.2" cy="255.2" rx="7.4" ry="6.3" fill="#f9d273"/>
+<ellipse cx="118.9" cy="218.6" rx="11.1" ry="10.2" fill="#f2c25e"/>
+<ellipse cx="120.2" cy="220.0" rx="9.5" ry="8.6" fill="#f9d273"/>
+<ellipse cx="119.7" cy="90.0" rx="33.4" ry="30.5" fill="#f2c25e"/>
+<ellipse cx="123.7" cy="94.3" rx="28.7" ry="25.6" fill="#f9d273"/>
+<ellipse cx="28.7" cy="294.5" rx="10.9" ry="9.8" fill="#f2c25e"/>
+<ellipse cx="30.0" cy="295.9" rx="9.4" ry="8.2" fill="#f9d273"/>
+<ellipse cx="298.8" cy="111.4" rx="13.7" ry="12.9" fill="#f2c25e"/>
+<ellipse cx="300.5" cy="113.2" rx="11.8" ry="10.9" fill="#f9d273"/>
+<ellipse cx="54.5" cy="48.4" rx="10.8" ry="8.8" fill="#f2c25e"/>
+<ellipse cx="55.8" cy="49.6" rx="9.3" ry="7.4" fill="#f9d273"/>
+<ellipse cx="179.0" cy="234.6" rx="33.3" ry="32.1" fill="#f2c25e"/>
+<ellipse cx="183.0" cy="239.1" rx="28.6" ry="27.0" fill="#f9d273"/>
+<ellipse cx="267.7" cy="177.8" rx="17.1" ry="14.6" fill="#f2c25e"/>
+<ellipse cx="269.8" cy="179.9" rx="14.7" ry="12.3" fill="#f9d273"/>
+<ellipse cx="255.6" cy="296.7" rx="12.3" ry="10.3" fill="#f2c25e"/>
+<ellipse cx="257.1" cy="298.2" rx="10.5" ry="8.7" fill="#f9d273"/>
+</svg>

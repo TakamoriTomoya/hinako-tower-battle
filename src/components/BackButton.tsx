@@ -1,3 +1,5 @@
+import { ArrowLeftIcon } from "./icons";
+
 interface Props {
   onClick: () => void;
 }
@@ -11,7 +13,7 @@ export function BackButton({ onClick }: Props) {
       aria-label="ホームへ戻る"
       onClick={onClick}
     >
-      ←
+      <ArrowLeftIcon />
     </button>
   );
 }

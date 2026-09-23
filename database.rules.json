@@ -3,6 +3,10 @@
     ".read": false,
     ".write": false,
     "rooms": {
+      ".read": true,
+      ".indexOn": [
+        "touchedAt"
+      ],
       "$roomId": {
         ".read": true,
         ".write": true

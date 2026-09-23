@@ -12,12 +12,12 @@ interface Props extends PageSlots {
   canvasRef: RefObject<HTMLCanvasElement | null>;
 }
 
-// 全フェーズ共通の1つのベース画面。青空の背景・土台と駒を描く共有canvasは
+// 全フェーズ共通の1つのベース画面。チーズ柄の背景・土台と駒を描く共有canvasは
 // 常にこの1箇所だけに存在し、画面が切り替わっても再マウントされない。
 // 各pageはこのスロットに何を入れるかを決めるだけ。
 export function BasePage({ canvasRef, header, center, bottom }: Props) {
   return (
-    <div className="relative h-dvh w-full overflow-hidden bg-play-sky">
+    <div className="relative h-dvh w-full overflow-hidden bg-cheese">
       <GameCanvas canvasRef={canvasRef}>{center}</GameCanvas>
       <div className="pointer-events-none absolute inset-x-0 top-0 flex h-[15%] items-center justify-center pt-[max(1rem,env(safe-area-inset-top))]">
         {header}
