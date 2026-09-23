@@ -23,19 +23,19 @@ export interface Snapshot {
   remainingSeconds: number;
   rerollsRemaining: number;
   currentPieceName: string;
+  currentBodyId: number | null; // 狙い中の駒のID(aiming以外はnull)。ゲストが手元で動かす駒の特定に使う
   bodies: SnapshotBody[]; // 土台は含めない(ゲストはローカルの土台画像をそのまま描く)
 }
 
-// ゲスト→ホスト: 自分の手番の間に行った入力の意図。
-// ホストは自分のローカル入力ハンドラが更新するのと同じ内部状態(heldDirection等)に変換して適用する。
+// ゲスト→ホスト: 自分の手番の間の操作。
+// 狙い中の駒はゲストが手元で動かし(操作の遅延をなくすため)、ホストには結果の位置・角度だけを送る。
+// idはどの駒に対する操作かを示し、キャラ変更などで駒が入れ替わった後に届いた古い操作をホストが無視できるようにする。
 // (RemoteInputEvent = RemoteInputPayload & { seq: number }とせずunion自体にseqを持たせているのは、
 //  TypeScript組み込みのOmitがunionに対して分配されずdir等の判別フィールドを消してしまうため。
 //  送信側はseqを持たないRemoteInputPayloadを使い、RoomSync側でseqを付与する)
 export type RemoteInputPayload =
-  | { type: "move"; dir: -1 | 0 | 1 }
-  | { type: "rotateStart" }
-  | { type: "rotateEnd" }
-  | { type: "drop" }
+  | { type: "aim"; id: number; x: number; angle: number }
+  | { type: "drop"; id: number; x: number; angle: number }
   | { type: "reroll" };
 
 export type RemoteInputEvent = RemoteInputPayload & { seq: number };

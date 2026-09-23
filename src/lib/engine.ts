@@ -21,7 +21,6 @@ import {
   FALL_Y,
   GROUND_W,
   GROUND_Y,
-  GUEST_DRAG_DEAD_ZONE,
   MAX_ANGULAR_SPEED,
   MAX_DROP_WAIT_FRAMES,
   MAX_FALL_SPEED,
@@ -31,6 +30,7 @@ import {
   PIECE_HEIGHT,
   PIECE_MATERIAL,
   PLAYER_NAMES,
+  REMOTE_AIM_SMOOTHING,
   REROLL_LIMIT,
   ROTATE_HOLD_SPEED,
   ROTATE_SMOOTHING,
@@ -96,8 +96,8 @@ export class TowerBattleEngine {
   private remainingSeconds = Math.ceil(AIM_TIME_LIMIT_MS / 1000);
   // 落とすキャラのランダム変更の残り回数(1試合につきプレイヤーごと)
   private rerollsRemaining: Record<Player, number> = { 1: REROLL_LIMIT, 2: REROLL_LIMIT };
-  private heldDirection: -1 | 0 | 1 = 0; // -1: 左, 1: 右, 0: 停止(ゲスト側では「直近に送信した方向」の意味でも使う)
-  private isRotating = false; // 回転操作中か(ゲスト側では「rotateStart送信済み」の意味でも使う)
+  private heldDirection: -1 | 0 | 1 = 0; // -1: 左, 1: 右, 0: 停止
+  private isRotating = false; // 回転操作中か
   private aimAngle = 0;
   private displayAngle = 0;
   private cameraOffsetY = 0; // タワーが高くなった分だけ画面全体を下にずらす(=カメラが上にスライドする)量
@@ -125,6 +125,13 @@ export class TowerBattleEngine {
   private guestPrevBodies: SnapshotBody[] = [];
   private guestLatestBodies: SnapshotBody[] = [];
   private guestLatestAt = 0;
+  // ゲスト側: 自分の手番で狙っている駒。ホストの応答を待たず手元で動かし(往復の遅延をなくすため)、
+  // 位置・角度だけをホストへ送る。角度はaimAngle/displayAngleをホストと同じ使い方で流用する。
+  private guestAim: { id: number; src: string; x: number; y: number; dropped: boolean } | null = null;
+  private lastAimSentAt = 0;
+  private lastAimSent: { x: number; angle: number } | null = null;
+  // ホスト側: ゲストから届いた狙い位置。currentBodyはここへ毎フレーム少しずつ寄せる
+  private remoteAimTarget: { x: number; angle: number } | null = null;
 
   // ホーム画面も「ゲーム画面(土台+駒)」をそのまま流用して表示する(見た目の実装を二重に持たない)。
   // 物理演算はさせず、ただの静止した飾りとして両脇に積む。
@@ -246,9 +253,7 @@ export class TowerBattleEngine {
     if (this.network) {
       if (!this.isMyLocalTurn()) return;
       if (this.network.role === "guest") {
-        if (this.isRotating) return; // 送信済みなら重複送信しない
-        this.isRotating = true;
-        this.sendGuestInput({ type: "rotateStart" });
+        if (this.guestAim && !this.guestAim.dropped) this.isRotating = true;
         return;
       }
     }
@@ -257,9 +262,7 @@ export class TowerBattleEngine {
 
   stopRotating(): void {
     if (this.network?.role === "guest") {
-      if (!this.isRotating) return; // 開始していないのに終了だけ来た(ボタン外へのポインタ移動等)場合は無視
       this.isRotating = false;
-      this.sendGuestInput({ type: "rotateEnd" });
       return;
     }
     if (this.network && !this.isMyLocalTurn()) return;
@@ -320,6 +323,9 @@ export class TowerBattleEngine {
     this.guestDisplay = null;
     this.guestPrevBodies = [];
     this.guestLatestBodies = [];
+    this.guestAim = null;
+    this.lastAimSent = null;
+    this.remoteAimTarget = null;
   }
 
   // ---- 内部: オンライン対戦 ----
@@ -342,22 +348,39 @@ export class TowerBattleEngine {
   private applyRemoteInput(event: RemoteInputEvent): void {
     if (!this.network || this.network.role !== "host") return;
     switch (event.type) {
-      case "move":
-        this.heldDirection = event.dir;
-        break;
-      case "rotateStart":
-        this.doStartRotating();
-        break;
-      case "rotateEnd":
-        this.doStopRotating();
+      case "aim":
+        if (!this.isRemoteAimFor(event.id)) return;
+        this.remoteAimTarget = { x: event.x, angle: event.angle };
         break;
       case "drop":
+        if (!this.isRemoteAimFor(event.id) || !this.currentBody) return;
+        // ゲストの画面で狙っていた位置・角度ちょうどから落とす(補間途中の位置で落とさない)
+        Body.setPosition(this.currentBody, { x: event.x, y: this.currentSpawnY });
+        this.aimAngle = event.angle;
+        this.displayAngle = event.angle;
+        Body.setAngle(this.currentBody, event.angle);
         this.dropPiece();
         break;
       case "reroll":
         this.doReroll();
         break;
     }
+  }
+
+  // ホスト専用: ゲストの手番で、いま狙い中の駒に対する操作か(駒の入れ替え前に送られた古い操作は捨てる)
+  private isRemoteAimFor(id: number): boolean {
+    return this.phase === "aiming" && this.currentPlayer === 2 && this.currentBody?.plugin.id === id;
+  }
+
+  // ホスト専用: ゲストの手番の間、狙い中の駒をゲストから届いた位置・角度へ滑らかに寄せる
+  private followRemoteAim(body: PieceBody): void {
+    const target = this.remoteAimTarget;
+    if (!target) return;
+    const x = body.position.x + (target.x - body.position.x) * REMOTE_AIM_SMOOTHING;
+    Body.setPosition(body, { x, y: this.currentSpawnY });
+    this.displayAngle += (target.angle - this.displayAngle) * REMOTE_AIM_SMOOTHING;
+    this.aimAngle = this.displayAngle;
+    Body.setAngle(body, this.displayAngle);
   }
 
   // ホスト専用: 一定間隔でワールドの状態をゲストへ配信する
@@ -377,6 +400,7 @@ export class TowerBattleEngine {
       remainingSeconds: this.remainingSeconds,
       rerollsRemaining: this.rerollsRemaining[this.currentPlayer],
       currentPieceName: this.currentBody?.plugin.piece.name ?? "",
+      currentBodyId: this.phase === "aiming" ? (this.currentBody?.plugin.id ?? null) : null,
       bodies,
     });
   }
@@ -398,15 +422,72 @@ export class TowerBattleEngine {
     this.guestPrevBodies = this.guestLatestBodies;
     this.guestLatestBodies = snapshot.bodies;
     this.guestLatestAt = performance.now();
+    this.syncGuestAim(snapshot);
     this.emit();
+  }
+
+  // ゲスト専用: 自分の手番で新しい駒が来たら、手元で動かす狙いの状態をその駒で初期化する。
+  // 同じ駒の間はホストから届く(自分が送った分だけ遅れた)位置で上書きしない。
+  private syncGuestAim(snapshot: Snapshot): void {
+    const id = snapshot.phase === "aiming" && snapshot.turnPlayer === 2 ? snapshot.currentBodyId : null;
+    if (id === null) {
+      this.guestAim = null;
+      this.isRotating = false;
+      this.heldDirection = 0;
+      this.isDraggingPiece = false;
+      return;
+    }
+    if (this.guestAim?.id === id) return;
+    const body = snapshot.bodies.find((b) => b.id === id);
+    if (!body) return;
+    this.guestAim = { id, src: body.src, x: body.x, y: body.y, dropped: false };
+    this.aimAngle = body.angle;
+    this.displayAngle = body.angle;
+    this.isDraggingPiece = false;
+    this.lastAimSent = null;
+  }
+
+  // ゲスト専用: 手元の狙いを毎フレーム進め、一定間隔でホストへ送る
+  private updateGuestAim(now: number): void {
+    const aim = this.guestAim;
+    if (!aim || aim.dropped) return;
+    if (this.isRotating) this.aimAngle += ROTATE_HOLD_SPEED;
+    this.displayAngle += (this.aimAngle - this.displayAngle) * ROTATE_SMOOTHING;
+    if (Math.abs(this.aimAngle - this.displayAngle) < 0.001) this.displayAngle = this.aimAngle;
+    aim.x = this.clampGuestAimX(aim.x + this.heldDirection * MOVE_SPEED);
+
+    if (now - this.lastAimSentAt < NETWORK_BROADCAST_INTERVAL_MS) return;
+    if (this.lastAimSent && this.lastAimSent.x === aim.x && this.lastAimSent.angle === this.displayAngle) return;
+    this.lastAimSentAt = now;
+    this.lastAimSent = { x: aim.x, angle: this.displayAngle };
+    this.sendGuestInput({ type: "aim", id: aim.id, x: aim.x, angle: this.displayAngle });
+  }
+
+  private clampGuestAimX(x: number): number {
+    const piece = this.guestAim && this.pieces.find((p) => p.src === this.guestAim?.src);
+    const margin = piece ? this.pieceHorizontalMarginFor(piece, this.displayAngle) : FALLBACK_MARGIN;
+    return Math.max(margin, Math.min(CANVAS_W - margin, x));
+  }
+
+  // ゲスト専用: 手元で狙っていた位置・角度をそのまま添えて落とす
+  private guestDrop(): void {
+    const aim = this.guestAim;
+    if (!aim || aim.dropped) return;
+    aim.dropped = true;
+    this.isRotating = false;
+    this.heldDirection = 0;
+    this.sendGuestInput({ type: "drop", id: aim.id, x: aim.x, angle: this.displayAngle });
   }
 
   // ゲスト専用: 直近2回分のスナップショットの間を補間した位置を返す(20Hz更新でも滑らかに見せるため)
   private guestInterpolatedBodies(): SnapshotBody[] {
     const t = Math.max(0, Math.min(1, (performance.now() - this.guestLatestAt) / NETWORK_BROADCAST_INTERVAL_MS));
     const prevById = new Map(this.guestPrevBodies.map((b) => [b.id, b] as const));
+    const aim = this.guestAim;
     return this.guestLatestBodies.map((cur) => {
       const prev = prevById.get(cur.id);
+      // 自分が狙い中の駒は、ホストからの(遅れた)位置ではなく手元の狙いで描く
+      if (aim && cur.id === aim.id) return { id: cur.id, src: cur.src, x: aim.x, y: aim.y, angle: this.displayAngle };
       if (!prev) return cur; // 直前のスナップショットに無い(=新しく出現した)駒はそのまま表示
       return {
         id: cur.id,
@@ -506,6 +587,7 @@ export class TowerBattleEngine {
     this.aimAngle = 0;
     this.displayAngle = 0;
     this.isRotating = false;
+    this.remoteAimTarget = null;
     this.aimElapsedMs = 0;
     this.remainingSeconds = Math.ceil(AIM_TIME_LIMIT_MS / 1000);
     this.emit();
@@ -560,6 +642,7 @@ export class TowerBattleEngine {
     this.currentBody = body as PieceBody;
     this.aimAngle = 0;
     this.displayAngle = 0;
+    this.remoteAimTarget = null;
 
     // キャラごとに横幅が違うため、変更後の駒がキャンバス外にはみ出さない位置へ収め直す
     const margin = this.pieceHorizontalMargin(this.currentBody);
@@ -613,7 +696,12 @@ export class TowerBattleEngine {
   // 現在の回転角での実際の画像バウンディングボックスから、中心～端に必要な余白を都度計算する。
   private pieceHorizontalMargin(body: PieceBody): number {
     const piece = body.plugin?.piece;
-    if (!piece || !piece.ready) return FALLBACK_MARGIN;
+    if (!piece) return FALLBACK_MARGIN;
+    return this.pieceHorizontalMarginFor(piece, body.angle);
+  }
+
+  private pieceHorizontalMarginFor(piece: Piece, angle: number): number {
+    if (!piece.ready) return FALLBACK_MARGIN;
     const { imageOffsetX: left, imageOffsetY: top, w, h } = piece;
     const corners = [
       { x: left, y: top },
@@ -621,8 +709,8 @@ export class TowerBattleEngine {
       { x: left, y: top + h },
       { x: left + w, y: top + h },
     ];
-    const cos = Math.cos(body.angle);
-    const sin = Math.sin(body.angle);
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
     let maxAbsX = 0;
     corners.forEach((c) => {
       const rx = c.x * cos - c.y * sin;
@@ -688,51 +776,44 @@ export class TowerBattleEngine {
     if (e.code === "KeyE") this.stopRotating();
   };
 
-  // ---- 内部: 入力(ゲスト側。ローカルでは反映せずホストへ送信するだけ) ----
-
-  private setGuestDirection(dir: -1 | 0 | 1): void {
-    if (this.heldDirection === dir) return;
-    this.heldDirection = dir;
-    this.sendGuestInput({ type: "move", dir });
-  }
+  // ---- 内部: 入力(ゲスト側。狙い中の駒を手元で動かし、結果はupdateGuestAimがホストへ送る) ----
 
   private guestHandlePointerDown(e: PointerEvent): void {
-    if (!this.isMyLocalTurn() || this.phase !== "aiming" || !this.canvas) return;
+    if (!this.guestAim || this.guestAim.dropped || !this.canvas) return;
     this.isDraggingPiece = true;
     this.dragStartClientX = e.clientX;
+    this.dragStartPieceX = this.guestAim.x;
     this.dragMoved = 0;
     this.canvas.setPointerCapture(e.pointerId);
   }
 
   private guestHandlePointerMove(e: PointerEvent): void {
-    if (!this.isDraggingPiece) return;
-    const delta = e.clientX - this.dragStartClientX;
-    this.dragMoved = Math.max(this.dragMoved, Math.abs(delta));
-    const dir: -1 | 0 | 1 = delta > GUEST_DRAG_DEAD_ZONE ? 1 : delta < -GUEST_DRAG_DEAD_ZONE ? -1 : 0;
-    this.setGuestDirection(dir);
+    if (!this.isDraggingPiece || !this.guestAim || this.guestAim.dropped) return;
+    const deltaX = (e.clientX - this.dragStartClientX) * this.canvasScale();
+    this.dragMoved = Math.max(this.dragMoved, Math.abs(e.clientX - this.dragStartClientX));
+    this.guestAim.x = this.clampGuestAimX(this.dragStartPieceX + deltaX);
   }
 
   private guestHandlePointerUp(): void {
     if (!this.isDraggingPiece) return;
     this.isDraggingPiece = false;
-    this.setGuestDirection(0);
-    if (this.dragMoved <= TAP_MAX_DISTANCE) this.sendGuestInput({ type: "drop" });
+    if (this.dragMoved <= TAP_MAX_DISTANCE) this.guestDrop();
   }
 
   private guestHandleKeyDown(e: KeyboardEvent): void {
-    if (!this.isMyLocalTurn()) return;
-    if (e.code === "ArrowLeft") this.setGuestDirection(-1);
-    if (e.code === "ArrowRight") this.setGuestDirection(1);
+    if (!this.guestAim || this.guestAim.dropped) return;
+    if (e.code === "ArrowLeft") this.heldDirection = -1;
+    if (e.code === "ArrowRight") this.heldDirection = 1;
     if (e.code === "Space" || e.code === "ArrowDown") {
       e.preventDefault();
-      this.sendGuestInput({ type: "drop" });
+      this.guestDrop();
     }
     if (e.code === "KeyE") this.startRotating();
   }
 
   private guestHandleKeyUp(e: KeyboardEvent): void {
-    if (e.code === "ArrowLeft" && this.heldDirection === -1) this.setGuestDirection(0);
-    if (e.code === "ArrowRight" && this.heldDirection === 1) this.setGuestDirection(0);
+    if (e.code === "ArrowLeft" && this.heldDirection === -1) this.heldDirection = 0;
+    if (e.code === "ArrowRight" && this.heldDirection === 1) this.heldDirection = 0;
     if (e.code === "KeyE") this.stopRotating();
   }
 
@@ -892,7 +973,8 @@ export class TowerBattleEngine {
     this.lastTime = now;
 
     if (this.network?.role === "guest") {
-      // ゲストは物理演算を一切行わない。受信済みのスナップショットをそのまま描画するだけ。
+      // ゲストは物理演算を一切行わない。自分の狙い中の駒だけ手元で動かし、残りは受信済みのスナップショットを描画する。
+      this.updateGuestAim(now);
       this.render();
       this.rafId = requestAnimationFrame(this.loop);
       return;
@@ -900,17 +982,22 @@ export class TowerBattleEngine {
 
     if (this.phase === "aiming" || this.phase === "dropping") {
       if (this.phase === "aiming" && this.currentBody) {
-        let x = this.currentBody.position.x + this.heldDirection * MOVE_SPEED;
-        const margin = this.pieceHorizontalMargin(this.currentBody);
-        x = Math.max(margin, Math.min(CANVAS_W - margin, x));
-        Body.setPosition(this.currentBody, { x, y: this.currentSpawnY });
+        if (this.network?.role === "host" && this.currentPlayer === 2) {
+          // ゲストの手番: 駒はゲストの手元で動いているので、届いた位置・角度に追従させるだけ
+          this.followRemoteAim(this.currentBody);
+        } else {
+          let x = this.currentBody.position.x + this.heldDirection * MOVE_SPEED;
+          const margin = this.pieceHorizontalMargin(this.currentBody);
+          x = Math.max(margin, Math.min(CANVAS_W - margin, x));
+          Body.setPosition(this.currentBody, { x, y: this.currentSpawnY });
 
-        if (this.isRotating) this.aimAngle += ROTATE_HOLD_SPEED;
+          if (this.isRotating) this.aimAngle += ROTATE_HOLD_SPEED;
 
-        // 目標角へ少しずつ近づけて回転を滑らかにする
-        this.displayAngle += (this.aimAngle - this.displayAngle) * ROTATE_SMOOTHING;
-        if (Math.abs(this.aimAngle - this.displayAngle) < 0.001) this.displayAngle = this.aimAngle;
-        Body.setAngle(this.currentBody, this.displayAngle);
+          // 目標角へ少しずつ近づけて回転を滑らかにする
+          this.displayAngle += (this.aimAngle - this.displayAngle) * ROTATE_SMOOTHING;
+          if (Math.abs(this.aimAngle - this.displayAngle) < 0.001) this.displayAngle = this.aimAngle;
+          Body.setAngle(this.currentBody, this.displayAngle);
+        }
 
         // 制限時間の消化。表示は秒単位(切り上げ)だが、値が変わった時だけemitしてReactの再描画を抑える
         this.aimElapsedMs += delta;

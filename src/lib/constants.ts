@@ -62,9 +62,9 @@ export const PLAYER_NAMES: Record<1 | 2, string> = { 1: "ともや", 2: "ひな�
 // 短くするほど滑らかだがFirebaseへの書き込み回数が増える。20Hz程度で見た目には十分滑らか。
 export const NETWORK_BROADCAST_INTERVAL_MS = 50;
 
-// オンライン対戦: ゲスト側のドラッグ操作を左右移動の方向に変換する際の不感帯(px)。
-// タップ判定(TAP_MAX_DISTANCE)よりわずかに大きくし、タップのブレで誤って移動扱いにしない。
-export const GUEST_DRAG_DEAD_ZONE = 10;
+// オンライン対戦: ホスト側で、ゲストから届いた狙い位置へ毎フレーム近づける割合。
+// 受信は20Hz程度なのでそのまま反映するとカクつく。大きいほど素早く追いつく。
+export const REMOTE_AIM_SMOOTHING = 0.35;
 
 export const GROUND_IMAGE_SRC =
   "/ground/74ADF095-B515-4049-880D-3EBD290C653F.PNG";
