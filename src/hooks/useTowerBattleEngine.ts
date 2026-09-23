@@ -12,6 +12,7 @@ export function useTowerBattleEngine() {
     remainingSeconds: Math.ceil(AIM_TIME_LIMIT_MS / 1000),
     rerollsRemaining: REROLL_LIMIT,
     assetsReady: false,
+    currentPieceName: "",
   });
 
   // useEffectだとブラウザが一度ペイントした後に実行されるため、
@@ -41,6 +42,7 @@ export function useTowerBattleEngine() {
     remainingSeconds: state.remainingSeconds,
     rerollsRemaining: state.rerollsRemaining,
     assetsReady: state.assetsReady,
+    currentPieceName: state.currentPieceName,
     actions: { startBattle, goHome, startRotating, stopRotating, rerollPiece },
   };
 }

@@ -6,10 +6,11 @@ import {
   pieceImageSrc,
 } from "./constants";
 import { extractOutline, polygonCentroid, type Point } from "./geometry";
-import { PIECE_IMAGE_FILES } from "./pieceSizes";
+import { PIECE_IMAGE_FILES } from "./pieceCatalog";
 
 export interface Piece {
   src: string;
+  name: string;
   img: HTMLImageElement;
   sizeScale: number;
   ready: boolean;
@@ -44,10 +45,11 @@ function prepareHull(piece: Piece): void {
 }
 
 export function loadPieceImages(onEachLoad: () => void): Piece[] {
-  return PIECE_IMAGE_FILES.map(({ file, sizeScale }) => {
+  return PIECE_IMAGE_FILES.map(({ file, name, sizeScale }) => {
     const src = pieceImageSrc(file);
     const piece: Piece = {
       src,
+      name,
       img: new Image(),
       sizeScale,
       ready: false,

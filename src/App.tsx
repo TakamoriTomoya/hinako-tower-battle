@@ -6,8 +6,17 @@ import { ResultPage } from "./pages/ResultPage";
 import { useTowerBattleEngine } from "./hooks/useTowerBattleEngine";
 
 function App() {
-  const { canvasRef, phase, turnPlayer, winner, remainingSeconds, rerollsRemaining, assetsReady, actions } =
-    useTowerBattleEngine();
+  const {
+    canvasRef,
+    phase,
+    turnPlayer,
+    winner,
+    remainingSeconds,
+    rerollsRemaining,
+    assetsReady,
+    currentPieceName,
+    actions,
+  } = useTowerBattleEngine();
 
   const slots =
     phase === "home"
@@ -18,6 +27,7 @@ function App() {
             turnPlayer,
             remainingSeconds,
             rerollsRemaining,
+            currentPieceName,
             onRotateStart: actions.startRotating,
             onRotateEnd: actions.stopRotating,
             onReroll: actions.rerollPiece,

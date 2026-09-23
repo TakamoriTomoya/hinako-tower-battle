@@ -37,7 +37,7 @@ export const PIECE_MATERIAL = {
 export const PIECE_HEIGHT = 100; // ゲーム内での基準の高さ(px)。写真ごとに幅はここから縦横比で決まる
 export const MASK_GRID_STEP = 8; // 輪郭抽出用グリッドの間隔(元画像のpx単位) : 小さいほど輪郭が精細だが重くなる
 export const ALPHA_THRESHOLD = 24; // これより不透明なピクセルだけを「駒の中身」とみなす
-export const SIMPLIFY_EPSILON = 3; // 輪郭の単純化の強さ(グリッド単位)。大きいほど頂点が減って軽く安定するが、細部は失われる
+export const SIMPLIFY_EPSILON = 6; // 輪郭の単純化の強さ(グリッド単位)。大きいほど頂点が減って軽く安定するが、細部は失われる
 
 export const VIEW_TOP_MARGIN = 24; // タワー最上部の駒の、さらに上に残す余白
 export const VIEW_ZOOM_SMOOTHING = 0.1; // 縮小/復帰の滑らかさ(大きいほど素早く追いつく)
@@ -51,7 +51,6 @@ export const AIM_TIME_LIMIT_MS = 10000; // 狙いを定められる制限時間�
 
 export const REROLL_LIMIT = 2; // 落とすキャラのランダム変更、1試合あたりプレイヤー1人につき使える回数
 
-export const HOME_PILE_Y_OFFSET = 12; // ホーム画面の見本の駒を土台の実際の面よりさらに下げる分(px)
 export const FALLBACK_MARGIN = 30; // 画像未準備時の当たり判定サイズが未確定なための暫定値
 export const TAP_MAX_DISTANCE = 6; // これ以下の移動量ならタップ扱い(px)
 
@@ -60,7 +59,7 @@ export const PLAYER_NAMES: Record<1 | 2, string> = { 1: "ともや", 2: "ひな�
 export const GROUND_IMAGE_SRC =
   "/ground/74ADF095-B515-4049-880D-3EBD290C653F.PNG";
 
-// 駒に使う画像とその大きさ(sizeScale)の一覧は pieceSizes.ts に外出ししてある。
+// 駒に使う画像・名前・大きさ(sizeScale)の一覧は pieceCatalog.ts に外出ししてある。
 // (images/配下の写真を毎回ランダムに使う)
 
 export function pieceImageSrc(file: string): string {

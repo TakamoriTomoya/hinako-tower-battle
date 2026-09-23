@@ -14,7 +14,6 @@ import {
   FALL_Y,
   GROUND_W,
   GROUND_Y,
-  HOME_PILE_Y_OFFSET,
   MAX_DROP_WAIT_FRAMES,
   MAX_FALL_SPEED,
   MOVE_SPEED,
@@ -52,6 +51,7 @@ export interface EngineState {
   remainingSeconds: number; // 狙い中の残り時間(秒、切り上げ)。aiming以外の時は参照されない
   rerollsRemaining: number; // 今の手番のプレイヤーが、落とすキャラをランダム変更できる残り回数
   assetsReady: boolean; // 土台・駒の画像を全て読み込み終えたか(falseの間はローディング画面を出す)
+  currentPieceName: string; // 今狙っている(落とそうとしている)駒の名前。駒がない時は空文字
 }
 
 export type EngineStateListener = (state: EngineState) => void;
@@ -100,8 +100,6 @@ export class TowerBattleEngine {
 
   // ホーム画面も「ゲーム画面(土台+駒)」をそのまま流用して表示する(見た目の実装を二重に持たない)。
   // 物理演算はさせず、ただの静止した飾りとして両脇に積む。
-  private homePreviewLeft: Piece[] = [];
-  private homePreviewRight: Piece[] = [];
 
   // ---- 画面サイズ対応 ----
   // 物理演算・駒の座標は常にCANVAS_W×CANVAS_Hの論理座標系で行い、
@@ -144,7 +142,6 @@ export class TowerBattleEngine {
       this.replaceGroundBodyWithOutline();
       this.checkAssetsReady();
     });
-    this.pickHomePreview();
   }
 
   init(canvas: HTMLCanvasElement): void {
@@ -213,7 +210,6 @@ export class TowerBattleEngine {
     this.phase = "home";
     this.winner = null;
     this.currentBody = null;
-    this.pickHomePreview();
     this.emit();
   }
 
@@ -299,6 +295,7 @@ export class TowerBattleEngine {
       remainingSeconds: this.remainingSeconds,
       rerollsRemaining: this.rerollsRemaining[this.currentPlayer],
       assetsReady: this.assetsReady,
+      currentPieceName: this.currentBody?.plugin.piece.name ?? "",
     });
   }
 
@@ -329,12 +326,6 @@ export class TowerBattleEngine {
     World.remove(this.engine.world, this.ground);
     World.add(this.engine.world, shapedGround);
     this.ground = shapedGround;
-  }
-
-  // ホーム画面の両脇に積む「見本」を毎回ランダムに選び直す
-  private pickHomePreview(): void {
-    this.homePreviewLeft = [0, 1, 2].map(() => pickRandomPiece(this.pieces));
-    this.homePreviewRight = [0, 1, 2].map(() => pickRandomPiece(this.pieces));
   }
 
   // タワーの一番高い場所に合わせてスポーン位置を決める(タワーが空ならSPAWN_Y_BASE)
@@ -572,28 +563,6 @@ export class TowerBattleEngine {
     }
   }
 
-  // ホーム画面用: 土台の上に見本の駒を物理演算なしで静止させて積む(左右2箇所)
-  private drawPile(ctx: CanvasRenderingContext2D, x: number, groundTopY: number, pieces: Piece[]): void {
-    let y = groundTopY;
-    pieces.forEach((piece, i) => {
-      if (!piece.ready) return;
-      y -= piece.h * 0.62;
-      const wobble = i % 2 === 0 ? -1 : 1;
-      ctx.save();
-      ctx.translate(x + wobble * 3, y);
-      ctx.rotate(wobble * 0.06);
-      ctx.drawImage(piece.img, piece.imageOffsetX, piece.imageOffsetY, piece.w, piece.h);
-      ctx.restore();
-      y -= piece.h * 0.2;
-    });
-  }
-
-  private drawHomePreview(ctx: CanvasRenderingContext2D): void {
-    const groundTopY = this.groundTopSurfaceY + HOME_PILE_Y_OFFSET;
-    this.drawPile(ctx, CANVAS_W * 0.24, groundTopY, this.homePreviewLeft);
-    this.drawPile(ctx, CANVAS_W * 0.76, groundTopY, this.homePreviewRight);
-  }
-
   private render(): void {
     this.syncSizeToContainer();
 
@@ -622,9 +591,7 @@ export class TowerBattleEngine {
 
     this.drawGround(ctx);
 
-    if (this.phase === "home") {
-      this.drawHomePreview(ctx);
-    } else {
+    if (this.phase !== "home") {
       Composite.allBodies(this.engine.world)
         .filter((b): b is PieceBody => b !== this.ground)
         .forEach((b) => this.drawBody(b));
