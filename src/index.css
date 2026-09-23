@@ -18,7 +18,7 @@
   --color-secondary: #ffc93c;
   --color-secondary-hover: #ffd666;
   --color-secondary-shadow: #d9a81e;
-  /* ホームの対戦ボタン(緑系。ローカルは濃い緑、オンラインは黄緑) */
+  /* ホームの対戦ボタン(緑系。ひとりで挑戦は濃い緑、オンラインは黄緑) */
   --color-green: #34a853;
   --color-green-hover: #47b866;
   --color-green-shadow: #23803d;

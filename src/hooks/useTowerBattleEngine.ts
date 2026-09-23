@@ -16,6 +16,7 @@ export function useTowerBattleEngine() {
     assetsReady: false,
     currentPieceName: "",
     towerMoving: false,
+    stackedCount: 0,
   });
 
   // useEffectだとブラウザが一度ペイントした後に実行されるため、
@@ -86,6 +87,7 @@ export function useTowerBattleEngine() {
     assetsReady: state.assetsReady,
     currentPieceName: state.currentPieceName,
     towerMoving: state.towerMoving,
+    stackedCount: state.stackedCount,
     actions,
   };
 }

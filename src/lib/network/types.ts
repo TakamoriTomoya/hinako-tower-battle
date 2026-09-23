@@ -25,6 +25,7 @@ export interface Snapshot {
   rerollsByPlayer: { p1: number; p2: number }; // ホストが抜けて入り直した時に両者の残り回数を復元するため
   currentPieceName: string;
   towerMoving?: boolean; // 積んだ駒がまだ動いているか(trueの間はゲストも落とせない)。古いホストは送らないので省略可
+  stackedCount?: number; // この対戦で積み上げた駒の個数。古いホストは送らないので省略可
   currentBodyId: number | null; // 狙い中の駒のID(aiming以外はnull)。ゲストが手元で動かす駒の特定に使う
   bodies: SnapshotBody[]; // 土台は含めない(ゲストはローカルの土台画像をそのまま描く)
 }
