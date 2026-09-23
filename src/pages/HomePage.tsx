@@ -1,5 +1,6 @@
 import { CenterSlot } from "../components/CenterSlot";
 import { StartButton } from "../components/StartButton";
+import { VersionLabel } from "../components/VersionLabel";
 import type { PageSlots } from "../components/BasePage";
 
 interface Props {
@@ -11,6 +12,11 @@ interface Props {
 // canvasはBasePage側に1つだけ存在し続けるので、画面切り替えで再生成されない。
 export function HomePage({ onStart }: Props): PageSlots {
   return {
+    header: (
+      <div className="flex w-full justify-end px-6">
+        <VersionLabel />
+      </div>
+    ),
     center: (
       <CenterSlot>
         ひなこ
