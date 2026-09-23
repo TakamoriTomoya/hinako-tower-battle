@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>人物タワーバトル</title>
+<title>ひなこタワーバトル</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="style.css" />
@@ -13,63 +13,35 @@
 
     <!-- ホーム画面 -->
     <section class="screen home-screen" id="homeScreen">
-      <div class="home-header">
-        <div class="home-title">
-          人物<br /><span class="accent">タワーバトル</span>
-        </div>
-        <div class="home-subtitle">2人こうたいで積み上げ対戦</div>
+      <div class="home-hero">
+        <div class="home-title">ひなこ<br />タワーバトル</div>
+        <button id="startBtn" class="play-btn" aria-label="はじめる">▶</button>
       </div>
-      <div class="hero-frame">
-        <div class="frame-placeholder">
-          <span class="frame-placeholder-icon">🧑</span>
-          人物タワーのイラスト
-        </div>
-      </div>
-      <button id="startBtn" class="pop-btn pop-btn-primary btn-lg">はじめる</button>
+      <div class="home-preview-stack home-preview-stack-left" id="previewStackLeft"></div>
+      <div class="home-preview-stack home-preview-stack-right" id="previewStackRight"></div>
+      <img class="home-ground" src="土台/74ADF095-B515-4049-880D-3EBD290C653F.PNG" alt="" />
     </section>
 
     <!-- 対戦画面 -->
     <section class="screen battle-screen" id="battleScreen" hidden>
-      <div class="player-chips">
-        <div class="chip chip-p1" id="chipP1">プレイヤー1</div>
-        <div class="chip chip-p2" id="chipP2">プレイヤー2</div>
-      </div>
-
       <div class="board-area">
         <canvas id="gameCanvas" width="380" height="640"></canvas>
+        <div class="result-title" id="gameOverTitle" hidden></div>
       </div>
 
-      <div class="turn-text" id="turnLabel">プレイヤー1の番！</div>
+      <div class="turn-text" id="turnLabel">ともやの番！</div>
 
-      <div class="controls controls-rotate">
+      <div class="controls controls-rotate" id="rotateControls">
         <button id="rotateLeftBtn" class="pop-btn pop-btn-ghost ctrl-btn-rotate">↺</button>
         <button id="rotateRightBtn" class="pop-btn pop-btn-ghost ctrl-btn-rotate">↻</button>
       </div>
 
-      <div class="controls">
-        <button id="leftBtn" class="pop-btn pop-btn-ghost ctrl-btn">◀</button>
-        <button id="dropBtn" class="pop-btn pop-btn-primary ctrl-btn-drop">おとす！</button>
-        <button id="rightBtn" class="pop-btn pop-btn-ghost ctrl-btn">▶</button>
+      <div class="controls controls-gameover" id="gameOverControls" hidden>
+        <button id="homeBtn" class="pop-btn pop-btn-ghost ctrl-btn-rotate" aria-label="ホームへ戻る">↩</button>
+        <button id="restartBtn" class="pop-btn pop-btn-ghost ctrl-btn-rotate" aria-label="もう一度あそぶ">↻</button>
       </div>
-    </section>
 
-    <!-- 勝利画面 -->
-    <div class="gameover-overlay" id="gameOverOverlay" hidden>
-      <div class="gameover-inner">
-        <div class="chip chip-victory">VICTORY!</div>
-        <div class="result-title" id="gameOverTitle">プレイヤー1の勝ち！🎉</div>
-        <div class="result-frame">
-          <div class="frame-placeholder">
-            <span class="frame-placeholder-icon">🏆</span>
-            勝利したタワーの写真
-          </div>
-        </div>
-        <div class="result-actions">
-          <button id="restartBtn" class="pop-btn pop-btn-primary btn-lg">もう一度あそぶ</button>
-          <button id="homeBtn" class="pop-btn pop-btn-secondary btn-md">ホームへ戻る</button>
-        </div>
-      </div>
-    </div>
+    </section>
 
   </div>
 

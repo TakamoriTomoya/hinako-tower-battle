@@ -1,4 +1,4 @@
-// 人物タワーバトル MVP
+// ひなこタワーバトル MVP
 // 物理エンジン: Matter.js
 // 駒はプレイヤーごとの実写切り抜き画像をそのまま使う(図形描画・トリミングなし)。
 
@@ -10,9 +10,12 @@ Matter.Common.setDecomp(decomp);
 // ---- 設定 ----
 const CANVAS_W = 380;
 const CANVAS_H = 640;
-const GROUND_Y = CANVAS_H - 60;
-const GROUND_W = 340;
-const SPAWN_Y = 70;
+const GROUND_Y = 520; // パン画像が縦長なため、下端が見切れないよう少し上に配置
+const GROUND_W = CANVAS_W; // ホーム画面の土台(幅100%=画面幅いっぱい)と大きさを揃える
+// タワーが空の時は低い位置から、積み上がるにつれて自動でスポーン位置を上げる
+const SPAWN_Y_BASE = 350; // タワーが空の時のスポーン高さ
+const SPAWN_CLEARANCE = 140; // タワーの一番高い場所からこの分だけ上に確保する
+const SPAWN_Y_MIN = 60; // どれだけ積み上がっても、これより上にはスポーンさせない
 const MOVE_SPEED = 4.5; // px / frame
 const SETTLE_FRAMES_NEEDED = 30; // 約0.5秒(60fps)
 const SETTLE_SPEED_EPS = 0.05;
@@ -32,23 +35,30 @@ const PHYSICS_SUBSTEPS = 4; // 1描画フレームを何回に分けて物理計
 const PIECE_MATERIAL = { restitution: 0, friction: 0.6, frictionStatic: 0.9 };
 
 // ---- 駒に使う画像(images/配下の写真を毎回ランダムに使う) ----
-// 新しい画像ファイルを追加したら、ここにファイル名を追記する。
+// 新しい画像ファイルを追加したら、ここに{file, sizeScale}を追記する。
+// sizeScaleは基準の高さ(PIECE_HEIGHT)に対する倍率で、キャラごとに固定。
 const PIECE_IMAGE_FILES = [
-  "IMG_5388.PNG",
-  "IMG_5389.PNG",
-  "IMG_5390.PNG",
-  "2C60643C-D607-450C-896E-B01BE80B8D9C.PNG",
+  { file: "IMG_5388.PNG", sizeScale: 0.8 },
+  { file: "IMG_5389.PNG", sizeScale: 1.0 },
+  { file: "IMG_5390.PNG", sizeScale: 0.9 },
+  { file: "IMG_5420.PNG", sizeScale: 0.9 },
+  { file: "2C60643C-D607-450C-896E-B01BE80B8D9C.PNG", sizeScale: 0.85 },
+  { file: "79608400-2234-43CE-8C43-8D6843DE2461.PNG", sizeScale: 1.35 },
+  { file: "D4C9D14C-5D68-4006-8C7C-54A66E659A9D.PNG", sizeScale: 1.2 },
+  { file: "F78FC116-C52B-4EA9-81AB-190E46281DD6.PNG", sizeScale: 1.25 },
 ];
 
 // ---- 土台の画像 ----
 const groundImage = new Image();
 let groundImageReady = false;
 groundImage.onload = () => {
+  prepareGroundOutline();
   groundImageReady = true;
+  replaceGroundBodyWithOutline();
 };
 groundImage.src = "土台/74ADF095-B515-4049-880D-3EBD290C653F.PNG";
 
-const PIECE_HEIGHT = 100; // ゲーム内でのおおよその高さ(px)。写真ごとに幅はここから縦横比で決まる
+const PIECE_HEIGHT = 100; // ゲーム内での基準の高さ(px)。写真ごとに幅はここから縦横比で決まる
 const MASK_GRID_STEP = 16; // 輪郭抽出用グリッドの間隔(元画像のpx単位) : 小さいほど輪郭が精細だが重くなる
 const ALPHA_THRESHOLD = 24; // これより不透明なピクセルだけを「駒の中身」とみなす
 const SIMPLIFY_EPSILON = 5; // 輪郭の単純化の強さ(グリッド単位)。大きいほど頂点が減って軽く安定するが、細部は失われる
@@ -219,7 +229,7 @@ function prepareHull(piece) {
     outline = points.length >= 3 ? convexHull(points) : [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }];
   }
 
-  const scale = PIECE_HEIGHT / img.naturalHeight;
+  const scale = (PIECE_HEIGHT * piece.sizeScale) / img.naturalHeight;
   piece.w = img.naturalWidth * scale;
   piece.h = img.naturalHeight * scale;
 
@@ -231,8 +241,64 @@ function prepareHull(piece) {
   piece.imageOffsetY = -centroid.y;
 }
 
-const pieceImages = PIECE_IMAGE_FILES.map((file) => {
-  const piece = { src: `images/${file}`, img: new Image(), ready: false };
+// ---- 土台の輪郭(フランスパンの実際の形。両端の尖りも含む) ----
+let groundOutlineLocal = null; // ゲーム内サイズに縮小済みの輪郭(重心が原点になるよう調整前)
+let groundImageOffsetX = 0;
+let groundImageOffsetY = 0;
+
+function prepareGroundOutline() {
+  const img = groundImage;
+  const off = document.createElement("canvas");
+  off.width = img.naturalWidth;
+  off.height = img.naturalHeight;
+  const octx = off.getContext("2d");
+  octx.drawImage(img, 0, 0);
+  const { data } = octx.getImageData(0, 0, off.width, off.height);
+  const w = off.width;
+  const h = off.height;
+
+  const gridW = Math.ceil(w / MASK_GRID_STEP);
+  const gridH = Math.ceil(h / MASK_GRID_STEP);
+  const grid = [];
+  for (let gy = 0; gy < gridH; gy++) {
+    const row = new Array(gridW).fill(0);
+    for (let gx = 0; gx < gridW; gx++) {
+      const px = Math.min(w - 1, gx * MASK_GRID_STEP + (MASK_GRID_STEP >> 1));
+      const py = Math.min(h - 1, gy * MASK_GRID_STEP + (MASK_GRID_STEP >> 1));
+      row[gx] = data[(py * w + px) * 4 + 3] > ALPHA_THRESHOLD ? 1 : 0;
+    }
+    grid.push(row);
+  }
+
+  const traced = traceContour(grid, gridW, gridH);
+  let outline = null;
+  if (traced.length >= 3) {
+    const simplified = simplifyPolygon(traced, SIMPLIFY_EPSILON);
+    if (simplified.length >= 3) {
+      outline = simplified.map((p) => ({ x: p.x * MASK_GRID_STEP, y: p.y * MASK_GRID_STEP }));
+    }
+  }
+  if (!outline) {
+    const points = [];
+    for (let gy = 0; gy < gridH; gy++) {
+      for (let gx = 0; gx < gridW; gx++) {
+        if (grid[gy][gx]) points.push({ x: gx * MASK_GRID_STEP, y: gy * MASK_GRID_STEP });
+      }
+    }
+    outline = points.length >= 3 ? convexHull(points) : null;
+  }
+  if (!outline) return; // 抽出できなければ従来の四角い当たり判定のまま
+
+  // 土台の幅(GROUND_W)に合わせて縮小する(縦横比は変えない)
+  const scale = GROUND_W / img.naturalWidth;
+  groundOutlineLocal = outline.map((p) => ({ x: p.x * scale, y: p.y * scale }));
+  const centroid = polygonCentroid(groundOutlineLocal);
+  groundImageOffsetX = -centroid.x;
+  groundImageOffsetY = -centroid.y;
+}
+
+const pieceImages = PIECE_IMAGE_FILES.map(({ file, sizeScale }) => {
+  const piece = { src: `images/${file}`, img: new Image(), ready: false, sizeScale };
   piece.img.onload = () => {
     prepareHull(piece);
     piece.ready = true;
@@ -257,11 +323,10 @@ engine.gravity.y = 0.5; // 落下速度をゆっくりめにする
 // 計算誤差レベルのごく僅かな揺れが収束しきらず、駒がじわじわにじみ続けてしまう。
 engine.enableSleeping = true;
 
-// 見た目は薄い土台だが、物理判定用の当たり判定は厚みを持たせて
-// 勢いよく積まれた時にすり抜ける(トンネリング)のを防ぐ
+// 画像の輪郭が用意できるまでの仮の当たり判定(四角、厚みを持たせてすり抜け防止)
 const GROUND_SURFACE_Y = GROUND_Y - 10;
 const GROUND_BODY_THICKNESS = 300;
-const ground = Bodies.rectangle(
+let ground = Bodies.rectangle(
   CANVAS_W / 2,
   GROUND_SURFACE_Y + GROUND_BODY_THICKNESS / 2,
   GROUND_W,
@@ -270,27 +335,47 @@ const ground = Bodies.rectangle(
 );
 World.add(engine.world, [ground]);
 
+// フランスパンの輪郭が準備できたら、四角い仮の当たり判定を実際の形に差し替える
+function replaceGroundBodyWithOutline() {
+  if (!groundOutlineLocal) return;
+  const groundX = CANVAS_W / 2 - GROUND_W / 2;
+  const groundBarY = GROUND_Y - 10;
+  const worldX = groundX - groundImageOffsetX;
+  const worldY = groundBarY - groundImageOffsetY;
+
+  const outlineBody = Bodies.fromVertices(worldX, worldY, [groundOutlineLocal], {}, true);
+  // 輪郭は丸みを帯びているため、駒がそのまま乗ると側面に重なって見えてしまう。
+  // 見た目には影響しない「平らな支え」を頂上に足して、駒がぴったり乗るようにする。
+  const topY = outlineBody.bounds.min.y;
+  const flatTop = Bodies.rectangle(worldX, topY + 5, GROUND_W * 0.7, 10);
+  const outlineParts = outlineBody.parts.length > 1 ? outlineBody.parts.slice(1) : [outlineBody];
+  const shapedGround = Body.create({ parts: [...outlineParts, flatTop], isStatic: true });
+
+  World.remove(engine.world, ground);
+  World.add(engine.world, shapedGround);
+  ground = shapedGround;
+}
+
 // ---- DOM ----
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const homeScreen = document.getElementById("homeScreen");
+const previewStackLeft = document.getElementById("previewStackLeft");
+const previewStackRight = document.getElementById("previewStackRight");
 const battleScreen = document.getElementById("battleScreen");
 const turnLabel = document.getElementById("turnLabel");
-const chipP1 = document.getElementById("chipP1");
-const chipP2 = document.getElementById("chipP2");
-const gameOverOverlay = document.getElementById("gameOverOverlay");
 const gameOverTitle = document.getElementById("gameOverTitle");
+const rotateControls = document.getElementById("rotateControls");
+const gameOverControls = document.getElementById("gameOverControls");
 const startBtn = document.getElementById("startBtn");
 const restartBtn = document.getElementById("restartBtn");
 const homeBtn = document.getElementById("homeBtn");
-const leftBtn = document.getElementById("leftBtn");
-const rightBtn = document.getElementById("rightBtn");
-const dropBtn = document.getElementById("dropBtn");
 const rotateLeftBtn = document.getElementById("rotateLeftBtn");
 const rotateRightBtn = document.getElementById("rotateRightBtn");
 
 // ---- ゲーム状態 ----
 const STATE = { HOME: "home", AIMING: "aiming", DROPPING: "dropping", GAMEOVER: "gameover" };
+const PLAYER_NAMES = { 1: "ともや", 2: "ひなこ" };
 
 let state = STATE.HOME;
 let currentPlayer = 1;
@@ -307,15 +392,27 @@ const ROTATE_SMOOTHING = 0.25; // 目標角に近づく速さ(大きいほど素
 
 const FALLING_SPEED_THRESHOLD = 1.2; // これを一度でも超えたら「本当に落下し始めた」とみなす
 
+let currentSpawnY = SPAWN_Y_BASE;
+
+// タワーの一番高い場所に合わせてスポーン位置を決める(タワーが空ならSPAWN_Y_BASE)
+function computeSpawnY() {
+  const bodies = Composite.allBodies(engine.world).filter((b) => b !== ground);
+  if (bodies.length === 0) return SPAWN_Y_BASE;
+  const towerTopY = Math.min(...bodies.map((b) => b.bounds.min.y));
+  return Math.max(SPAWN_Y_MIN, Math.min(SPAWN_Y_BASE, towerTopY - SPAWN_CLEARANCE));
+}
+
 function spawnPiece() {
+  currentSpawnY = computeSpawnY();
   const piece = pickRandomPiece();
   let body;
   if (piece.hullLocal) {
     // 写真の不透明部分を包む凸包を当たり判定にする(見えない四角の余白をなくす)
-    body = Bodies.fromVertices(CANVAS_W / 2, SPAWN_Y, [piece.hullLocal], PIECE_MATERIAL, true);
+    body = Bodies.fromVertices(CANVAS_W / 2, currentSpawnY, [piece.hullLocal], PIECE_MATERIAL, true);
   } else {
     // 画像の読み込み・輪郭計算がまだ終わっていない場合の一時的なフォールバック
-    body = Bodies.rectangle(CANVAS_W / 2, SPAWN_Y, PIECE_HEIGHT * 0.6, PIECE_HEIGHT, PIECE_MATERIAL);
+    const fallbackHeight = PIECE_HEIGHT * piece.sizeScale;
+    body = Bodies.rectangle(CANVAS_W / 2, currentSpawnY, fallbackHeight * 0.6, fallbackHeight, PIECE_MATERIAL);
   }
   Body.setStatic(body, true);
   body.plugin = { piece };
@@ -332,11 +429,7 @@ function rotateAim(direction) {
 }
 
 function updateTurnLabel() {
-  turnLabel.textContent = `プレイヤー${currentPlayer}の番！`;
-  chipP1.classList.toggle("active", currentPlayer === 1);
-  chipP1.classList.toggle("inactive", currentPlayer !== 1);
-  chipP2.classList.toggle("active", currentPlayer === 2);
-  chipP2.classList.toggle("inactive", currentPlayer !== 2);
+  turnLabel.textContent = `${PLAYER_NAMES[currentPlayer]}の番！`;
 }
 
 function dropPiece() {
@@ -381,8 +474,11 @@ function checkSettled() {
 function endGame(loserPlayer) {
   state = STATE.GAMEOVER;
   const winner = loserPlayer === 1 ? 2 : 1;
-  gameOverTitle.textContent = `プレイヤー${winner}の勝ち！🎉`;
-  gameOverOverlay.hidden = false;
+  gameOverTitle.textContent = `${PLAYER_NAMES[winner]}の勝利`;
+  gameOverTitle.hidden = false;
+  turnLabel.hidden = true;
+  rotateControls.hidden = true;
+  gameOverControls.hidden = false;
 }
 
 function nextTurn() {
@@ -398,30 +494,108 @@ function clearWorld() {
 
 function startBattle() {
   clearWorld();
-  currentPlayer = 1;
-  gameOverOverlay.hidden = true;
+  currentPlayer = Math.random() < 0.5 ? 1 : 2; // 先攻/後攻は毎回ランダム
+  gameOverTitle.hidden = true;
+  gameOverControls.hidden = true;
+  turnLabel.hidden = false;
+  rotateControls.hidden = false;
   homeScreen.hidden = true;
   battleScreen.hidden = false;
   state = STATE.AIMING;
   spawnPiece();
 }
 
+// ホーム画面の土台の上に、駒画像をランダムに3つずつ左右に積んだ見た目を作る
+function renderHomePreview() {
+  [previewStackLeft, previewStackRight].forEach((container) => {
+    container.innerHTML = "";
+    for (let i = 0; i < 3; i++) {
+      const { file } = PIECE_IMAGE_FILES[Math.floor(Math.random() * PIECE_IMAGE_FILES.length)];
+      const img = document.createElement("img");
+      img.className = "preview-piece";
+      img.src = `images/${file}`;
+      img.alt = "";
+      container.appendChild(img);
+    }
+  });
+}
+
 function goHome() {
   clearWorld();
   state = STATE.HOME;
-  gameOverOverlay.hidden = true;
+  gameOverTitle.hidden = true;
+  gameOverControls.hidden = true;
   battleScreen.hidden = true;
   homeScreen.hidden = false;
+  renderHomePreview();
 }
 
 // ---- 入力 ----
-leftBtn.addEventListener("pointerdown", () => (heldDirection = -1));
-rightBtn.addEventListener("pointerdown", () => (heldDirection = 1));
-["pointerup", "pointerleave", "pointercancel"].forEach((ev) => {
-  leftBtn.addEventListener(ev, () => (heldDirection = 0));
-  rightBtn.addEventListener(ev, () => (heldDirection = 0));
+// キャンバスを左右にドラッグして照準中の駒を直接動かす(◀▶ボタンと併用可)。
+// ほとんど動かさずに離した場合は「タップ」とみなしてそのまま落とす。
+let isDraggingPiece = false;
+let dragStartClientX = 0;
+let dragStartPieceX = 0;
+let dragMoved = 0;
+const TAP_MAX_DISTANCE = 6; // これ以下の移動量ならタップ扱い(px)
+
+function canvasScale() {
+  const rect = canvas.getBoundingClientRect();
+  return rect.width > 0 ? CANVAS_W / rect.width : 1;
+}
+
+const FALLBACK_MARGIN = 30; // 画像未準備時の当たり判定サイズが未確定なための暫定値
+
+// キャラ画像は駒ごと(sizeScale)に描画サイズが大きく異なり、かつ回転もするため、
+// 「中心からキャンバス端までの固定30px」では大きい・回転した駒がキャンバス外にはみ出て見切れる。
+// 現在の回転角での実際の画像バウンディングボックスから、中心～端に必要な余白を都度計算する。
+function pieceHorizontalMargin(body) {
+  const piece = body.plugin && body.plugin.piece;
+  if (!piece || !piece.ready) return FALLBACK_MARGIN;
+  const { imageOffsetX: left, imageOffsetY: top, w, h } = piece;
+  const corners = [
+    { x: left, y: top },
+    { x: left + w, y: top },
+    { x: left, y: top + h },
+    { x: left + w, y: top + h },
+  ];
+  const cos = Math.cos(body.angle);
+  const sin = Math.sin(body.angle);
+  let maxAbsX = 0;
+  corners.forEach((c) => {
+    const rx = c.x * cos - c.y * sin;
+    maxAbsX = Math.max(maxAbsX, Math.abs(rx));
+  });
+  return maxAbsX;
+}
+
+canvas.addEventListener("pointerdown", (e) => {
+  if (state !== STATE.AIMING || !currentBody) return;
+  isDraggingPiece = true;
+  dragStartClientX = e.clientX;
+  dragStartPieceX = currentBody.position.x;
+  dragMoved = 0;
+  canvas.setPointerCapture(e.pointerId);
 });
-dropBtn.addEventListener("click", dropPiece);
+canvas.addEventListener("pointermove", (e) => {
+  if (!isDraggingPiece || state !== STATE.AIMING || !currentBody) return;
+  const deltaX = (e.clientX - dragStartClientX) * canvasScale();
+  dragMoved = Math.max(dragMoved, Math.abs(e.clientX - dragStartClientX));
+  let x = dragStartPieceX + deltaX;
+  const margin = pieceHorizontalMargin(currentBody);
+  x = Math.max(margin, Math.min(CANVAS_W - margin, x));
+  Body.setPosition(currentBody, { x, y: currentSpawnY });
+});
+canvas.addEventListener("pointerup", () => {
+  if (isDraggingPiece && dragMoved <= TAP_MAX_DISTANCE) dropPiece();
+  isDraggingPiece = false;
+});
+["pointercancel", "pointerleave"].forEach((ev) => {
+  canvas.addEventListener(ev, () => {
+    isDraggingPiece = false;
+  });
+});
+
 rotateLeftBtn.addEventListener("click", () => rotateAim(-1));
 rotateRightBtn.addEventListener("click", () => rotateAim(1));
 startBtn.addEventListener("click", startBattle);
@@ -468,24 +642,21 @@ function render() {
   // 土台
   const groundX = CANVAS_W / 2 - GROUND_W / 2;
   const groundBarY = GROUND_Y - 10;
-  if (groundImageReady) {
-    // 画像の縦横比は変えず、土台の幅(GROUND_W)に合わせて高さを決める。
-    // 当たり判定の面(groundBarY)は変えず、そこを画像の上端にして下方向に伸ばす
+  if (groundImageReady && groundOutlineLocal) {
+    // 実際の当たり判定(パンの輪郭)の位置に合わせて画像を描画する
+    const groundImgH = GROUND_W * (groundImage.naturalHeight / groundImage.naturalWidth);
+    ctx.save();
+    ctx.translate(ground.position.x, ground.position.y);
+    ctx.drawImage(groundImage, groundImageOffsetX, groundImageOffsetY, GROUND_W, groundImgH);
+    ctx.restore();
+  } else if (groundImageReady) {
+    // 輪郭抽出がまだの場合の仮表示(縦横比は変えず、上端をgroundBarYに合わせる)
     const groundImgH = GROUND_W * (groundImage.naturalHeight / groundImage.naturalWidth);
     ctx.drawImage(groundImage, groundX, groundBarY, GROUND_W, groundImgH);
   } else {
     ctx.fillStyle = "#e0b98c";
     ctx.fillRect(groundX, groundBarY, GROUND_W, 20);
   }
-
-  // 落下ライン(目安)
-  ctx.strokeStyle = "rgba(255,111,145,0.4)";
-  ctx.setLineDash([6, 6]);
-  ctx.beginPath();
-  ctx.moveTo(0, FALL_Y - 1);
-  ctx.lineTo(CANVAS_W, FALL_Y - 1);
-  ctx.stroke();
-  ctx.setLineDash([]);
 
   Composite.allBodies(engine.world)
     .filter((b) => b !== ground)
@@ -501,8 +672,9 @@ function loop(now) {
   if (state === STATE.AIMING || state === STATE.DROPPING) {
     if (state === STATE.AIMING && currentBody) {
       let x = currentBody.position.x + heldDirection * MOVE_SPEED;
-      x = Math.max(30, Math.min(CANVAS_W - 30, x));
-      Body.setPosition(currentBody, { x, y: SPAWN_Y });
+      const margin = pieceHorizontalMargin(currentBody);
+      x = Math.max(margin, Math.min(CANVAS_W - margin, x));
+      Body.setPosition(currentBody, { x, y: currentSpawnY });
 
       // 目標角へ少しずつ近づけて回転を滑らかにする
       displayAngle += (aimAngle - displayAngle) * ROTATE_SMOOTHING;
@@ -547,4 +719,5 @@ function loop(now) {
 }
 
 // ---- 起動 ----
+renderHomePreview();
 requestAnimationFrame(loop);

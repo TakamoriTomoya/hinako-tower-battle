@@ -46,11 +46,9 @@ body {
 
 .app {
   width: 100%;
-  max-width: 380px;
-  margin: 16px;
-  background: var(--bg-cream);
-  border-radius: 32px;
-  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.06), 0 20px 40px rgba(0, 0, 0, 0.08);
+  height: 100vh;
+  margin: 0;
+  background: #3aafff;
   overflow: hidden;
   position: relative;
   display: flex;
@@ -61,6 +59,9 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
 }
 
 .screen[hidden] {
@@ -69,59 +70,99 @@ body {
 
 /* ---- ホーム画面 ---- */
 .home-screen {
-  padding: 20px;
-  gap: 18px;
-  background: linear-gradient(180deg, var(--bg-yellow-grad) 0%, var(--bg-cream) 40%);
+  position: relative;
+  background: #3aafff;
+  overflow: hidden;
 }
 
-.home-header {
-  text-align: center;
-  padding-top: 18px;
+/* 土台より上のスペースで中央寄せしたいので、position:absoluteで直接位置指定する
+   (padding-bottomの%はコンテナの「幅」基準になり高さには使えないため) */
+.home-hero {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  width: max-content;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+
+/* 対戦画面で実測した土台の位置(画面全体の高さに対して65.2%)に合わせる。
+   キャンバスの上にプレイヤーチップ、下に操作ボタンがある分、
+   キャンバス内部の比率(79.7%)とは一致しないため、実測値を使う */
+.home-ground {
+  position: absolute;
+  left: 0;
+  top: 65.2%;
+  width: 100%;
+  pointer-events: none;
+}
+
+.home-preview-stack {
+  position: absolute;
+  /* 土台(パン)の丸みの分、少しめり込ませて隙間なく設置して見えるようにする */
+  bottom: calc(34.8% - 45px);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  pointer-events: none;
+}
+
+.home-preview-stack-left {
+  left: 24%;
+}
+
+.home-preview-stack-right {
+  left: 76%;
+}
+
+.preview-piece {
+  height: 70px;
+  width: auto;
+  margin-top: -14px;
+}
+
+.preview-piece:nth-child(odd) {
+  transform: rotate(-3deg) translateX(-4px);
+}
+
+.preview-piece:nth-child(even) {
+  transform: rotate(4deg) translateX(6px);
 }
 
 .home-title {
   font-family: "Baloo 2", sans-serif;
   font-weight: 800;
+  font-size: 34px;
+  line-height: 1.15;
+  color: #ffffff;
+  text-align: center;
+  -webkit-text-stroke: 1.5px #ffffff;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.15);
+}
+
+.play-btn {
+  width: 100px;
+  height: 100px;
+  border: 6px solid #ffffff;
+  border-radius: 999px;
+  background: transparent;
+  color: #ffffff;
   font-size: 36px;
-  line-height: 1.05;
-  color: var(--text-dark);
-}
-
-.home-title .accent {
-  color: var(--primary);
-}
-
-.home-subtitle {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-light);
-  margin-top: 8px;
-}
-
-.hero-frame {
-  flex: 1;
-  border-radius: 24px;
-  background: var(--frame-yellow);
-  overflow: hidden;
-}
-
-.frame-placeholder {
-  width: 100%;
-  height: 100%;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-light);
-  text-align: center;
-  padding: 12px;
+  padding-left: 6px; /* 三角アイコンの視覚中心を円に合わせる */
+  cursor: pointer;
+  filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.15));
+  transition: transform 0.1s;
 }
 
-.frame-placeholder-icon {
-  font-size: 40px;
+.play-btn:active {
+  transform: scale(0.96);
 }
 
 /* ---- ボタン共通 ---- */
@@ -141,18 +182,6 @@ body {
   transform: scale(0.96);
 }
 
-.pop-btn-primary {
-  background: var(--primary);
-  color: var(--bg-cream);
-  box-shadow: 0 4px 0 var(--primary-shadow);
-}
-
-.pop-btn-secondary {
-  background: var(--secondary);
-  color: var(--text-dark);
-  box-shadow: 0 4px 0 var(--secondary-shadow);
-}
-
 .pop-btn-ghost {
   background: var(--ghost-bg);
   color: var(--ghost-text);
@@ -160,67 +189,16 @@ body {
 }
 
 @media (hover: hover) {
-  .pop-btn-primary:hover {
-    background: var(--primary-hover);
-  }
-  .pop-btn-secondary:hover {
-    background: var(--secondary-hover);
-  }
   .pop-btn-ghost:hover {
     background: var(--ghost-hover);
   }
-}
-
-.btn-lg {
-  height: 52px;
-  font-size: 18px;
-}
-
-.btn-md {
-  height: 48px;
-  font-size: 16px;
-}
-
-/* ---- チップ ---- */
-.chip {
-  border-radius: 999px;
-  padding: 6px 14px;
-  font-weight: 800;
-  font-size: 13px;
-  font-family: "Nunito", sans-serif;
 }
 
 /* ---- 対戦画面 ---- */
 .battle-screen {
   padding: 16px 20px;
   gap: 12px;
-  background: var(--bg-battle);
-}
-
-.player-chips {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.chip-p1 {
-  background: var(--p1-bg);
-  color: var(--p1-text);
-  font-size: 12px;
-}
-
-.chip-p2 {
-  background: var(--p2-bg);
-  color: var(--p2-text);
-  font-size: 12px;
-}
-
-.chip.active {
-  outline: 2px solid currentColor;
-}
-
-.chip.inactive {
-  opacity: 0.45;
+  background: #3aafff;
 }
 
 .board-area {
@@ -233,7 +211,7 @@ body {
   display: block;
   width: 100%;
   height: auto;
-  background: linear-gradient(#dff0ff, #f2f9ff);
+  background: transparent;
   touch-action: none;
 }
 
@@ -251,16 +229,8 @@ body {
   gap: 10px;
 }
 
-.ctrl-btn {
-  width: 88px;
-  height: 48px;
-  font-size: 20px;
-}
-
-.ctrl-btn-drop {
-  width: 130px;
-  height: 48px;
-  font-size: 18px;
+.controls[hidden] {
+  display: none;
 }
 
 .ctrl-btn-rotate {
@@ -270,55 +240,22 @@ body {
 }
 
 /* ---- 勝利画面 ---- */
-.gameover-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, var(--p1-bg) 0%, var(--bg-cream) 45%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.gameover-overlay[hidden] {
-  display: none;
-}
-
-.gameover-inner {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 24px 20px;
-  gap: 14px;
-}
-
-.chip-victory {
-  background: var(--primary);
-  color: var(--bg-cream);
-  margin-top: 8px;
-}
-
 .result-title {
+  position: absolute;
+  top: 18%;
+  left: 0;
+  right: 0;
   font-family: "Baloo 2", sans-serif;
   font-weight: 800;
-  font-size: 40px;
-  color: var(--text-dark);
+  font-size: 34px;
+  line-height: 1.15;
+  color: #ffffff;
   text-align: center;
+  -webkit-text-stroke: 1.5px #ffffff;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.15);
+  pointer-events: none;
 }
 
-.result-frame {
-  width: 220px;
-  height: 180px;
-  border-radius: 24px;
-  background: var(--frame-yellow);
-  overflow: hidden;
-}
-
-.result-actions {
-  margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
+.result-title[hidden] {
+  display: none;
 }
