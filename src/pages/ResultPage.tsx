@@ -9,12 +9,13 @@ interface Props {
   winner: Player | null;
   onHome: () => void;
   onRestart: () => void;
+  canRestart?: boolean; // オンライン対戦のゲスト側では、再戦はホストのみが行える
 }
 
-export function ResultPage({ winner, onHome, onRestart }: Props): PageSlots {
+export function ResultPage({ winner, onHome, onRestart, canRestart = true }: Props): PageSlots {
   return {
     header: <BackButton onClick={onHome} />,
     center: winner && <CenterSlot>{playerName(winner)}の勝利</CenterSlot>,
-    bottom: <GameOverControls onRestart={onRestart} />,
+    bottom: canRestart ? <GameOverControls onRestart={onRestart} /> : null,
   };
 }

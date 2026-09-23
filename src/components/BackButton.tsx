@@ -11,7 +11,7 @@ export function BackButton({ onClick }: Props) {
       aria-label="ホームへ戻る"
       onClick={onClick}
     >
-      ↩
+      ←
     </button>
   );
 }

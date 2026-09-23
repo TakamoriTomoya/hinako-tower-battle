@@ -2,6 +2,13 @@
 // Matter.js物理・Canvas描画・ポインタ/キー入力をすべて内包する、Reactに依存しないクラス。
 // 駒の位置/角度は毎フレーム変わるためReact stateにはせず、UIに関わる値(手番・勝敗・画面)
 // だけをEngineStateListener経由でReact側に伝える。
+//
+// オンライン対戦(ホスト権威モデル):
+// - ホスト(プレイヤー1)側のこのクラスだけが実際にMatter.jsを実行し、結果を一定間隔で配信する。
+// - ゲスト(プレイヤー2)側のこのクラスはMatter.jsのworldを一切更新せず、受信したスナップショットを
+//   そのまま描画するだけの「ミラー」になる(環境によって結果がずれうる物理演算を2重に走らせない)。
+// - 自分の手番でない間はローカル入力を無視し、ゲストは自分の手番の入力をネットワーク経由でホストへ送る。
+//   ホストはそれを、ローカル入力ハンドラが更新するのと同じ内部状態(heldDirection等)に適用する。
 
 import * as Matter from "matter-js";
 import decomp from "poly-decomp";
@@ -14,10 +21,12 @@ import {
   FALL_Y,
   GROUND_W,
   GROUND_Y,
+  GUEST_DRAG_DEAD_ZONE,
   MAX_ANGULAR_SPEED,
   MAX_DROP_WAIT_FRAMES,
   MAX_FALL_SPEED,
   MOVE_SPEED,
+  NETWORK_BROADCAST_INTERVAL_MS,
   PHYSICS_SUBSTEPS,
   PIECE_HEIGHT,
   PIECE_MATERIAL,
@@ -34,6 +43,8 @@ import {
   VIEW_TOP_MARGIN,
 } from "./constants";
 import { loadGroundImage, type GroundAsset } from "./ground";
+import type { RoomSync } from "./network/roomSync";
+import type { RemoteInputEvent, RemoteInputPayload, RoomRole, Snapshot, SnapshotBody } from "./network/types";
 import { loadPieceImages, pickRandomPiece, type Piece } from "./pieces";
 
 const { Engine, World, Bodies, Body, Composite, Common, Sleeping } = Matter;
@@ -57,7 +68,7 @@ export interface EngineState {
 export type EngineStateListener = (state: EngineState) => void;
 
 interface PieceBody extends Matter.Body {
-  plugin: { piece: Piece };
+  plugin: { piece: Piece; id: number };
 }
 
 export class TowerBattleEngine {
@@ -85,17 +96,35 @@ export class TowerBattleEngine {
   private remainingSeconds = Math.ceil(AIM_TIME_LIMIT_MS / 1000);
   // 落とすキャラのランダム変更の残り回数(1試合につきプレイヤーごと)
   private rerollsRemaining: Record<Player, number> = { 1: REROLL_LIMIT, 2: REROLL_LIMIT };
-  private heldDirection: -1 | 0 | 1 = 0; // -1: 左, 1: 右, 0: 停止
-  private isRotating = false; // 回転ボタンを押している間だけtrue(右回りのみ)
+  private heldDirection: -1 | 0 | 1 = 0; // -1: 左, 1: 右, 0: 停止(ゲスト側では「直近に送信した方向」の意味でも使う)
+  private isRotating = false; // 回転操作中か(ゲスト側では「rotateStart送信済み」の意味でも使う)
   private aimAngle = 0;
   private displayAngle = 0;
   private cameraOffsetY = 0; // タワーが高くなった分だけ画面全体を下にずらす(=カメラが上にスライドする)量
   private currentSpawnY = SPAWN_Y_BASE;
+  private nextBodyId = 1; // 駒ごとの安定ID(オンライン対戦のスナップショット同期用)
 
   private isDraggingPiece = false;
   private dragStartClientX = 0;
   private dragStartPieceX = 0;
   private dragMoved = 0;
+
+  // ---- オンライン対戦 ----
+  private network: { role: RoomRole; sync: RoomSync } | null = null;
+  private readonly networkUnsubs: Array<() => void> = [];
+  private lastBroadcastAt = 0;
+  // ゲスト側: ホストから届いた最新/直前のスナップショット(補間描画・UI表示に使う)
+  private guestDisplay: {
+    phase: EnginePhase;
+    turnPlayer: Player;
+    winner: Player | null;
+    remainingSeconds: number;
+    rerollsRemaining: number;
+    currentPieceName: string;
+  } | null = null;
+  private guestPrevBodies: SnapshotBody[] = [];
+  private guestLatestBodies: SnapshotBody[] = [];
+  private guestLatestAt = 0;
 
   // ホーム画面も「ゲーム画面(土台+駒)」をそのまま流用して表示する(見た目の実装を二重に持たない)。
   // 物理演算はさせず、ただの静止した飾りとして両脇に積む。
@@ -155,6 +184,7 @@ export class TowerBattleEngine {
     this.disposed = true;
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.detachInput();
+    this.detachOnline();
   }
 
   // ResizeObserver等の「通知が来るのを待つ」方式は、通知が実際に届くタイミングが
@@ -213,51 +243,39 @@ export class TowerBattleEngine {
   }
 
   startRotating(): void {
-    if (this.phase !== "aiming" || !this.currentBody) return;
-    this.isRotating = true;
+    if (this.network) {
+      if (!this.isMyLocalTurn()) return;
+      if (this.network.role === "guest") {
+        if (this.isRotating) return; // 送信済みなら重複送信しない
+        this.isRotating = true;
+        this.sendGuestInput({ type: "rotateStart" });
+        return;
+      }
+    }
+    this.doStartRotating();
   }
 
   stopRotating(): void {
-    this.isRotating = false;
+    if (this.network?.role === "guest") {
+      if (!this.isRotating) return; // 開始していないのに終了だけ来た(ボタン外へのポインタ移動等)場合は無視
+      this.isRotating = false;
+      this.sendGuestInput({ type: "rotateEnd" });
+      return;
+    }
+    if (this.network && !this.isMyLocalTurn()) return;
+    this.doStopRotating();
   }
 
   // 落とすキャラをランダムに変更する(今の手番プレイヤーが持つ残り回数の分だけ)
   rerollPiece(): void {
-    if (this.phase !== "aiming" || !this.currentBody) return;
-    if (this.rerollsRemaining[this.currentPlayer] <= 0) return;
-
-    const previousSrc = this.currentBody.plugin.piece.src;
-    const x = this.currentBody.position.x;
-    World.remove(this.engine.world, this.currentBody);
-
-    const readyCount = this.pieces.filter((p) => p.ready && p.hullLocal).length;
-    let piece = pickRandomPiece(this.pieces);
-    // 選択肢が2種類以上ある時は、変更前と同じキャラを引き直さないようにする
-    for (let attempts = 0; attempts < 20 && readyCount > 1 && piece.src === previousSrc; attempts++) {
-      piece = pickRandomPiece(this.pieces);
+    if (this.network) {
+      if (!this.isMyLocalTurn()) return;
+      if (this.network.role === "guest") {
+        this.sendGuestInput({ type: "reroll" });
+        return;
+      }
     }
-
-    let body: Matter.Body;
-    if (piece.hullLocal) {
-      body = Bodies.fromVertices(x, this.currentSpawnY, [piece.hullLocal], PIECE_MATERIAL, true);
-    } else {
-      const fallbackHeight = PIECE_HEIGHT * piece.sizeScale;
-      body = Bodies.rectangle(x, this.currentSpawnY, fallbackHeight * 0.6, fallbackHeight, PIECE_MATERIAL);
-    }
-    Body.setStatic(body, true);
-    body.plugin = { piece };
-    World.add(this.engine.world, body);
-    this.currentBody = body as PieceBody;
-    this.aimAngle = 0;
-    this.displayAngle = 0;
-
-    // キャラごとに横幅が違うため、変更後の駒がキャンバス外にはみ出さない位置へ収め直す
-    const margin = this.pieceHorizontalMargin(this.currentBody);
-    const clampedX = Math.max(margin, Math.min(CANVAS_W - margin, x));
-    Body.setPosition(this.currentBody, { x: clampedX, y: this.currentSpawnY });
-
-    this.rerollsRemaining[this.currentPlayer]--;
-    this.emit();
+    this.doReroll();
   }
 
   dropPiece(): void {
@@ -271,6 +289,133 @@ export class TowerBattleEngine {
     this.dropElapsedFrames = 0;
     this.hasStartedFalling = false;
     this.emit();
+  }
+
+  // ---- オンライン対戦: 接続の開始/終了 ----
+
+  // ホストとして接続する。以降、自分の(ローカルの)Matter.js演算結果を定期的に配信し、
+  // ゲストからの入力を受け付ける。対戦の開始自体はこれまで通りstartBattle()を呼ぶ。
+  attachOnlineHost(sync: RoomSync): void {
+    this.detachOnline();
+    this.network = { role: "host", sync };
+    this.networkUnsubs.push(sync.onRemoteInput((event) => this.applyRemoteInput(event)));
+  }
+
+  // ゲストとして接続する。以降、自前のMatter.js演算は行わず、ホストからのスナップショットを
+  // 描画するだけになる。自分の手番の入力はホストへ送信する。
+  attachOnlineGuest(sync: RoomSync): void {
+    this.detachOnline();
+    this.network = { role: "guest", sync };
+    this.phase = "aiming";
+    this.currentPlayer = 2;
+    this.networkUnsubs.push(sync.onSnapshot((snapshot) => this.applySnapshot(snapshot)));
+    this.emit();
+  }
+
+  // オンライン接続を切る(部屋そのものの退室処理はRoomSync側の責務)
+  detachOnline(): void {
+    this.networkUnsubs.forEach((off) => off());
+    this.networkUnsubs.length = 0;
+    this.network = null;
+    this.guestDisplay = null;
+    this.guestPrevBodies = [];
+    this.guestLatestBodies = [];
+  }
+
+  // ---- 内部: オンライン対戦 ----
+
+  private localPlayer(): Player | null {
+    if (!this.network) return null;
+    return this.network.role === "host" ? 1 : 2;
+  }
+
+  private isMyLocalTurn(): boolean {
+    const lp = this.localPlayer();
+    return lp === null ? true : this.currentPlayer === lp;
+  }
+
+  private sendGuestInput(event: RemoteInputPayload): void {
+    this.network?.sync.sendInput(event);
+  }
+
+  // ホスト専用: ゲストから届いた入力を、ローカル入力ハンドラが更新するのと同じ内部状態に適用する
+  private applyRemoteInput(event: RemoteInputEvent): void {
+    if (!this.network || this.network.role !== "host") return;
+    switch (event.type) {
+      case "move":
+        this.heldDirection = event.dir;
+        break;
+      case "rotateStart":
+        this.doStartRotating();
+        break;
+      case "rotateEnd":
+        this.doStopRotating();
+        break;
+      case "drop":
+        this.dropPiece();
+        break;
+      case "reroll":
+        this.doReroll();
+        break;
+    }
+  }
+
+  // ホスト専用: 一定間隔でワールドの状態をゲストへ配信する
+  private broadcastIfDue(now: number): void {
+    if (!this.network || this.network.role !== "host") return;
+    if (now - this.lastBroadcastAt < NETWORK_BROADCAST_INTERVAL_MS) return;
+    this.lastBroadcastAt = now;
+
+    const bodies: SnapshotBody[] = Composite.allBodies(this.engine.world)
+      .filter((b): b is PieceBody => b !== this.ground)
+      .map((b) => ({ id: b.plugin.id, src: b.plugin.piece.src, x: b.position.x, y: b.position.y, angle: b.angle }));
+
+    this.network.sync.sendSnapshot({
+      phase: this.phase,
+      turnPlayer: this.currentPlayer,
+      winner: this.winner,
+      remainingSeconds: this.remainingSeconds,
+      rerollsRemaining: this.rerollsRemaining[this.currentPlayer],
+      currentPieceName: this.currentBody?.plugin.piece.name ?? "",
+      bodies,
+    });
+  }
+
+  // ゲスト専用: 受信したスナップショットを表示用状態に反映する
+  private applySnapshot(snapshot: Snapshot): void {
+    this.guestDisplay = {
+      phase: snapshot.phase,
+      turnPlayer: snapshot.turnPlayer,
+      winner: snapshot.winner,
+      remainingSeconds: snapshot.remainingSeconds,
+      rerollsRemaining: snapshot.rerollsRemaining,
+      currentPieceName: snapshot.currentPieceName,
+    };
+    this.phase = snapshot.phase;
+    this.currentPlayer = snapshot.turnPlayer;
+    this.winner = snapshot.winner;
+
+    this.guestPrevBodies = this.guestLatestBodies;
+    this.guestLatestBodies = snapshot.bodies;
+    this.guestLatestAt = performance.now();
+    this.emit();
+  }
+
+  // ゲスト専用: 直近2回分のスナップショットの間を補間した位置を返す(20Hz更新でも滑らかに見せるため)
+  private guestInterpolatedBodies(): SnapshotBody[] {
+    const t = Math.max(0, Math.min(1, (performance.now() - this.guestLatestAt) / NETWORK_BROADCAST_INTERVAL_MS));
+    const prevById = new Map(this.guestPrevBodies.map((b) => [b.id, b] as const));
+    return this.guestLatestBodies.map((cur) => {
+      const prev = prevById.get(cur.id);
+      if (!prev) return cur; // 直前のスナップショットに無い(=新しく出現した)駒はそのまま表示
+      return {
+        id: cur.id,
+        src: cur.src,
+        x: prev.x + (cur.x - prev.x) * t,
+        y: prev.y + (cur.y - prev.y) * t,
+        angle: prev.angle + (cur.angle - prev.angle) * t,
+      };
+    });
   }
 
   // ---- 内部: 状態通知 ----
@@ -287,6 +432,10 @@ export class TowerBattleEngine {
 
   private emit(): void {
     if (this.disposed) return;
+    if (this.network?.role === "guest" && this.guestDisplay) {
+      this.listener({ ...this.guestDisplay, assetsReady: this.assetsReady });
+      return;
+    }
     this.listener({
       phase: this.phase,
       turnPlayer: this.currentPlayer,
@@ -351,7 +500,7 @@ export class TowerBattleEngine {
       body = Bodies.rectangle(CANVAS_W / 2, this.currentSpawnY, fallbackHeight * 0.6, fallbackHeight, PIECE_MATERIAL);
     }
     Body.setStatic(body, true);
-    body.plugin = { piece };
+    body.plugin = { piece, id: this.nextBodyId++ };
     World.add(this.engine.world, body);
     this.currentBody = body as PieceBody;
     this.aimAngle = 0;
@@ -371,6 +520,53 @@ export class TowerBattleEngine {
   private endGame(loserPlayer: Player): void {
     this.phase = "gameover";
     this.winner = loserPlayer === 1 ? 2 : 1;
+    this.emit();
+  }
+
+  private doStartRotating(): void {
+    if (this.phase !== "aiming" || !this.currentBody) return;
+    this.isRotating = true;
+  }
+
+  private doStopRotating(): void {
+    this.isRotating = false;
+  }
+
+  private doReroll(): void {
+    if (this.phase !== "aiming" || !this.currentBody) return;
+    if (this.rerollsRemaining[this.currentPlayer] <= 0) return;
+
+    const previousSrc = this.currentBody.plugin.piece.src;
+    const x = this.currentBody.position.x;
+    World.remove(this.engine.world, this.currentBody);
+
+    const readyCount = this.pieces.filter((p) => p.ready && p.hullLocal).length;
+    let piece = pickRandomPiece(this.pieces);
+    // 選択肢が2種類以上ある時は、変更前と同じキャラを引き直さないようにする
+    for (let attempts = 0; attempts < 20 && readyCount > 1 && piece.src === previousSrc; attempts++) {
+      piece = pickRandomPiece(this.pieces);
+    }
+
+    let body: Matter.Body;
+    if (piece.hullLocal) {
+      body = Bodies.fromVertices(x, this.currentSpawnY, [piece.hullLocal], PIECE_MATERIAL, true);
+    } else {
+      const fallbackHeight = PIECE_HEIGHT * piece.sizeScale;
+      body = Bodies.rectangle(x, this.currentSpawnY, fallbackHeight * 0.6, fallbackHeight, PIECE_MATERIAL);
+    }
+    Body.setStatic(body, true);
+    body.plugin = { piece, id: this.nextBodyId++ };
+    World.add(this.engine.world, body);
+    this.currentBody = body as PieceBody;
+    this.aimAngle = 0;
+    this.displayAngle = 0;
+
+    // キャラごとに横幅が違うため、変更後の駒がキャンバス外にはみ出さない位置へ収め直す
+    const margin = this.pieceHorizontalMargin(this.currentBody);
+    const clampedX = Math.max(margin, Math.min(CANVAS_W - margin, x));
+    Body.setPosition(this.currentBody, { x: clampedX, y: this.currentSpawnY });
+
+    this.rerollsRemaining[this.currentPlayer]--;
     this.emit();
   }
 
@@ -436,6 +632,8 @@ export class TowerBattleEngine {
   }
 
   private handlePointerDown = (e: PointerEvent): void => {
+    if (this.network?.role === "guest") return this.guestHandlePointerDown(e);
+    if (this.network && !this.isMyLocalTurn()) return;
     if (this.phase !== "aiming" || !this.currentBody || !this.canvas) return;
     this.isDraggingPiece = true;
     this.dragStartClientX = e.clientX;
@@ -445,6 +643,8 @@ export class TowerBattleEngine {
   };
 
   private handlePointerMove = (e: PointerEvent): void => {
+    if (this.network?.role === "guest") return this.guestHandlePointerMove(e);
+    if (this.network && !this.isMyLocalTurn()) return;
     if (!this.isDraggingPiece || this.phase !== "aiming" || !this.currentBody) return;
     const deltaX = (e.clientX - this.dragStartClientX) * this.canvasScale();
     this.dragMoved = Math.max(this.dragMoved, Math.abs(e.clientX - this.dragStartClientX));
@@ -455,6 +655,11 @@ export class TowerBattleEngine {
   };
 
   private handlePointerUp = (): void => {
+    if (this.network?.role === "guest") return this.guestHandlePointerUp();
+    if (this.network && !this.isMyLocalTurn()) {
+      this.isDraggingPiece = false;
+      return;
+    }
     if (this.isDraggingPiece && this.dragMoved <= TAP_MAX_DISTANCE) this.dropPiece();
     this.isDraggingPiece = false;
   };
@@ -464,6 +669,8 @@ export class TowerBattleEngine {
   };
 
   private handleKeyDown = (e: KeyboardEvent): void => {
+    if (this.network?.role === "guest") return this.guestHandleKeyDown(e);
+    if (this.network && !this.isMyLocalTurn()) return;
     if (e.code === "ArrowLeft") this.heldDirection = -1;
     if (e.code === "ArrowRight") this.heldDirection = 1;
     if (e.code === "Space" || e.code === "ArrowDown") {
@@ -474,10 +681,60 @@ export class TowerBattleEngine {
   };
 
   private handleKeyUp = (e: KeyboardEvent): void => {
+    if (this.network?.role === "guest") return this.guestHandleKeyUp(e);
+    if (this.network && !this.isMyLocalTurn()) return;
     if (e.code === "ArrowLeft" && this.heldDirection === -1) this.heldDirection = 0;
     if (e.code === "ArrowRight" && this.heldDirection === 1) this.heldDirection = 0;
     if (e.code === "KeyE") this.stopRotating();
   };
+
+  // ---- 内部: 入力(ゲスト側。ローカルでは反映せずホストへ送信するだけ) ----
+
+  private setGuestDirection(dir: -1 | 0 | 1): void {
+    if (this.heldDirection === dir) return;
+    this.heldDirection = dir;
+    this.sendGuestInput({ type: "move", dir });
+  }
+
+  private guestHandlePointerDown(e: PointerEvent): void {
+    if (!this.isMyLocalTurn() || this.phase !== "aiming" || !this.canvas) return;
+    this.isDraggingPiece = true;
+    this.dragStartClientX = e.clientX;
+    this.dragMoved = 0;
+    this.canvas.setPointerCapture(e.pointerId);
+  }
+
+  private guestHandlePointerMove(e: PointerEvent): void {
+    if (!this.isDraggingPiece) return;
+    const delta = e.clientX - this.dragStartClientX;
+    this.dragMoved = Math.max(this.dragMoved, Math.abs(delta));
+    const dir: -1 | 0 | 1 = delta > GUEST_DRAG_DEAD_ZONE ? 1 : delta < -GUEST_DRAG_DEAD_ZONE ? -1 : 0;
+    this.setGuestDirection(dir);
+  }
+
+  private guestHandlePointerUp(): void {
+    if (!this.isDraggingPiece) return;
+    this.isDraggingPiece = false;
+    this.setGuestDirection(0);
+    if (this.dragMoved <= TAP_MAX_DISTANCE) this.sendGuestInput({ type: "drop" });
+  }
+
+  private guestHandleKeyDown(e: KeyboardEvent): void {
+    if (!this.isMyLocalTurn()) return;
+    if (e.code === "ArrowLeft") this.setGuestDirection(-1);
+    if (e.code === "ArrowRight") this.setGuestDirection(1);
+    if (e.code === "Space" || e.code === "ArrowDown") {
+      e.preventDefault();
+      this.sendGuestInput({ type: "drop" });
+    }
+    if (e.code === "KeyE") this.startRotating();
+  }
+
+  private guestHandleKeyUp(e: KeyboardEvent): void {
+    if (e.code === "ArrowLeft" && this.heldDirection === -1) this.setGuestDirection(0);
+    if (e.code === "ArrowRight" && this.heldDirection === 1) this.setGuestDirection(0);
+    if (e.code === "KeyE") this.stopRotating();
+  }
 
   private attachInput(): void {
     const canvas = this.canvas;
@@ -510,12 +767,19 @@ export class TowerBattleEngine {
   // キャンバス上端(y=0)より外に出そうな分だけ画面全体を下にずらす量(=カメラを上にスライドさせる量)を求める。
   // 縮小はせず平行移動だけなので、タワーが高くなるほど土台は画面下から見切れていってよい。
   private computeTargetCameraOffsetY(): number {
-    const bodies = Composite.allBodies(this.engine.world).filter((b) => b !== this.ground);
     let minY = Infinity;
-    bodies.forEach((b) => {
-      if (b.bounds.min.y < minY) minY = b.bounds.min.y;
-    });
-    if (this.currentBody && this.currentBody.bounds.min.y < minY) minY = this.currentBody.bounds.min.y;
+    if (this.network?.role === "guest") {
+      // ゲスト側はMatter bodyを持たないため、受信済みの座標(中心y)から近似する
+      this.guestLatestBodies.forEach((b) => {
+        if (b.y < minY) minY = b.y;
+      });
+    } else {
+      const bodies = Composite.allBodies(this.engine.world).filter((b) => b !== this.ground);
+      bodies.forEach((b) => {
+        if (b.bounds.min.y < minY) minY = b.bounds.min.y;
+      });
+      if (this.currentBody && this.currentBody.bounds.min.y < minY) minY = this.currentBody.bounds.min.y;
+    }
     if (!isFinite(minY)) return 0;
 
     return Math.max(0, VIEW_TOP_MARGIN - minY);
@@ -534,6 +798,25 @@ export class TowerBattleEngine {
       ctx.drawImage(piece.img, piece.imageOffsetX, piece.imageOffsetY, piece.w, piece.h);
     } else {
       // 画像の読み込みが終わるまでの仮表示
+      ctx.fillStyle = "rgba(74, 66, 55, 0.15)";
+      ctx.fillRect(-PIECE_HEIGHT * 0.3, -PIECE_HEIGHT / 2, PIECE_HEIGHT * 0.6, PIECE_HEIGHT);
+    }
+
+    ctx.restore();
+  }
+
+  // ゲスト側: 受信したスナップショットの1駒分を描画する(drawBodyのMatter.Body版に相当)
+  private drawGuestBody(b: SnapshotBody): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const piece = this.pieces.find((p) => p.src === b.src);
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(b.angle);
+
+    if (piece?.ready) {
+      ctx.drawImage(piece.img, piece.imageOffsetX, piece.imageOffsetY, piece.w, piece.h);
+    } else {
       ctx.fillStyle = "rgba(74, 66, 55, 0.15)";
       ctx.fillRect(-PIECE_HEIGHT * 0.3, -PIECE_HEIGHT / 2, PIECE_HEIGHT * 0.6, PIECE_HEIGHT);
     }
@@ -589,9 +872,13 @@ export class TowerBattleEngine {
     this.drawGround(ctx);
 
     if (this.phase !== "home") {
-      Composite.allBodies(this.engine.world)
-        .filter((b): b is PieceBody => b !== this.ground)
-        .forEach((b) => this.drawBody(b));
+      if (this.network?.role === "guest") {
+        this.guestInterpolatedBodies().forEach((b) => this.drawGuestBody(b));
+      } else {
+        Composite.allBodies(this.engine.world)
+          .filter((b): b is PieceBody => b !== this.ground)
+          .forEach((b) => this.drawBody(b));
+      }
     }
 
     ctx.restore();
@@ -603,6 +890,13 @@ export class TowerBattleEngine {
     if (this.disposed) return;
     const delta = Math.min(33, now - this.lastTime);
     this.lastTime = now;
+
+    if (this.network?.role === "guest") {
+      // ゲストは物理演算を一切行わない。受信済みのスナップショットをそのまま描画するだけ。
+      this.render();
+      this.rafId = requestAnimationFrame(this.loop);
+      return;
+    }
 
     if (this.phase === "aiming" || this.phase === "dropping") {
       if (this.phase === "aiming" && this.currentBody) {
@@ -662,6 +956,7 @@ export class TowerBattleEngine {
     }
 
     this.render();
+    this.broadcastIfDue(now);
     this.rafId = requestAnimationFrame(this.loop);
   };
 }
