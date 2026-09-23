@@ -21,10 +21,11 @@
 - スマホでも操作できるようタップ操作を用意
 
 ## 技術構成
-- HTML5 Canvas + Matter.js（物理演算、CDN読み込み）
-- Vanilla JS、ビルドツール不要の静的サイト
-- 画像：MVPでは仮画像（図形＋顔）を使用。後で人物のオリジナル画像に差し替えられるよう、
-  キャラクター定義を1箇所（画像パス/色）にまとめておく
+- `app/` 配下: React + TypeScript + Vite
+- HTML5 Canvas + Matter.js（物理演算、npmパッケージ）
+- ゲーム本体(Matter.js物理・Canvas描画・入力)はReactに依存しない`TowerBattleEngine`クラスに集約し、
+  Reactは画面遷移・手番表示などUIの薄いシェルとして被せる構成
+- 画像：実写切り抜き画像（`app/public/images/`）をそのまま駒として使用
 
 ## MVPスコープ（今回作るもの）
 - 2人パスプレイのみ（CPU対戦・オンライン対戦は対象外）

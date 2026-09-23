@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@theme {
+  --font-heading: "Baloo 2", sans-serif;
+  --font-body: "Nunito", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+
+  /* 背景 */
+  --color-bg-outer: #f2efe6;
+  --color-bg-cream: #fffbf0;
+  --color-bg-yellow-grad: #fff6d9;
+  --color-bg-battle: #eff8ff;
+  --color-play-sky: #3aafff;
+
+  /* ボタン */
+  --color-primary: #ff6f91;
+  --color-primary-hover: #ff8aa6;
+  --color-primary-shadow: #d94f6e;
+  --color-secondary: #ffc93c;
+  --color-secondary-hover: #ffd666;
+  --color-secondary-shadow: #d9a81e;
+  --color-ghost-bg: #eaf7ee;
+  --color-ghost-hover: #d9f2e0;
+  --color-ghost-text: #2fb870;
+  --color-ghost-shadow: #cdebd6;
+
+  /* テキスト */
+  --color-text-dark: #4a4237;
+  --color-text-light: #8a8168;
+
+  /* プレイヤーチップ */
+  --color-p1-bg: #ffe1ea;
+  --color-p1-text: #d9436b;
+  --color-p2-bg: #e1f0ff;
+  --color-p2-text: #1e80c9;
+
+  /* 画像枠 */
+  --color-frame-yellow: #ffe7a3;
+}
+
+@layer base {
+  body {
+    @apply m-0 flex justify-center bg-bg-outer text-text-dark font-body;
+  }
+
+  /* bodyのdisplay:flexの子として幅がshrink-to-fitになり、
+     width:100%指定の子孫が0幅に潰れてしまうため明示する */
+  #root {
+    @apply w-full;
+  }
+}
+
+@layer components {
+  /* ホームタイトル・勝利タイトルの縁取り文字。Tailwindのユーティリティに無いプロパティなので共通クラス化 */
+  .stroke-title {
+    -webkit-text-stroke: 1.5px #ffffff;
+    text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.15);
+  }
+}

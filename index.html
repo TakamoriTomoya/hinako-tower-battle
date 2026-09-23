@@ -1,52 +1,20 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>ひなこタワーバトル</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css" />
-</head>
-<body>
-  <div class="app">
-
-    <!-- ホーム画面 -->
-    <section class="screen home-screen" id="homeScreen">
-      <div class="home-hero">
-        <div class="home-title">ひなこ<br />タワーバトル</div>
-        <button id="startBtn" class="play-btn" aria-label="はじめる">▶</button>
-      </div>
-      <div class="home-preview-stack home-preview-stack-left" id="previewStackLeft"></div>
-      <div class="home-preview-stack home-preview-stack-right" id="previewStackRight"></div>
-      <img class="home-ground" src="土台/74ADF095-B515-4049-880D-3EBD290C653F.PNG" alt="" />
-    </section>
-
-    <!-- 対戦画面 -->
-    <section class="screen battle-screen" id="battleScreen" hidden>
-      <div class="board-area">
-        <canvas id="gameCanvas" width="380" height="640"></canvas>
-        <div class="result-title" id="gameOverTitle" hidden></div>
-      </div>
-
-      <div class="turn-text" id="turnLabel">ともやの番！</div>
-
-      <div class="controls controls-rotate" id="rotateControls">
-        <button id="rotateLeftBtn" class="pop-btn pop-btn-ghost ctrl-btn-rotate">↺</button>
-        <button id="rotateRightBtn" class="pop-btn pop-btn-ghost ctrl-btn-rotate">↻</button>
-      </div>
-
-      <div class="controls controls-gameover" id="gameOverControls" hidden>
-        <button id="homeBtn" class="pop-btn pop-btn-ghost ctrl-btn-rotate" aria-label="ホームへ戻る">↩</button>
-        <button id="restartBtn" class="pop-btn pop-btn-ghost ctrl-btn-rotate" aria-label="もう一度あそぶ">↻</button>
-      </div>
-
-    </section>
-
-  </div>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/poly-decomp@0.3.0/build/decomp.min.js"></script>
-  <script src="main.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <title>ひなこタワーバトル</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
