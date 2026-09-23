@@ -8,7 +8,6 @@ export const GROUND_W = 320; // 土台の幅。高さは画像の縦横比から
 // タワーが空の時は低い位置から、積み上がるにつれて自動でスポーン位置を上げる
 export const SPAWN_Y_BASE = 250; // タワーが空の時のスポーン高さ
 export const SPAWN_CLEARANCE = 140; // タワーの一番高い場所からこの分だけ上に確保する
-export const SPAWN_Y_MIN = 60; // どれだけ積み上がっても、これより上にはスポーンさせない
 
 export const MOVE_SPEED = 4.5; // px / frame
 export const SETTLE_FRAMES_NEEDED = 30; // 約0.5秒(60fps)
