@@ -14,6 +14,7 @@ import {
   FALL_Y,
   GROUND_W,
   GROUND_Y,
+  MAX_ANGULAR_SPEED,
   MAX_DROP_WAIT_FRAMES,
   MAX_FALL_SPEED,
   MOVE_SPEED,
@@ -29,8 +30,8 @@ import {
   SPAWN_CLEARANCE,
   SPAWN_Y_BASE,
   TAP_MAX_DISTANCE,
+  VIEW_PAN_SMOOTHING,
   VIEW_TOP_MARGIN,
-  VIEW_ZOOM_SMOOTHING,
 } from "./constants";
 import { loadGroundImage, type GroundAsset } from "./ground";
 import { loadPieceImages, pickRandomPiece, type Piece } from "./pieces";
@@ -88,7 +89,7 @@ export class TowerBattleEngine {
   private isRotating = false; // 回転ボタンを押している間だけtrue(右回りのみ)
   private aimAngle = 0;
   private displayAngle = 0;
-  private viewScale = 1;
+  private cameraOffsetY = 0; // タワーが高くなった分だけ画面全体を下にずらす(=カメラが上にスライドする)量
   private currentSpawnY = SPAWN_Y_BASE;
 
   private isDraggingPiece = false;
@@ -119,7 +120,7 @@ export class TowerBattleEngine {
 
   constructor(listener: EngineStateListener) {
     this.listener = listener;
-    this.engine.gravity.y = 0.5; // 落下速度をゆっくりめにする
+    this.engine.gravity.y = 0.3; // 落下速度をゆっくりめにする
     // ほぼ止まった駒は完全に固定(スリープ)させる。これがないと着地後も
     // 計算誤差レベルのごく僅かな揺れが収束しきらず、駒がじわじわにじみ続けてしまう。
     this.engine.enableSleeping = true;
@@ -132,7 +133,7 @@ export class TowerBattleEngine {
       groundSurfaceY + groundBodyThickness / 2,
       GROUND_W,
       groundBodyThickness,
-      { isStatic: true },
+      { ...PIECE_MATERIAL, isStatic: true },
     );
     World.add(this.engine.world, [this.ground]);
 
@@ -302,6 +303,7 @@ export class TowerBattleEngine {
   private clearWorld(): void {
     const bodies = Composite.allBodies(this.engine.world).filter((b) => b !== this.ground);
     bodies.forEach((b) => World.remove(this.engine.world, b));
+    this.cameraOffsetY = 0; // 新しいタワーの開始時だけカメラを土台の位置に戻す
   }
 
   private replaceGroundBodyWithOutline(): void {
@@ -312,11 +314,11 @@ export class TowerBattleEngine {
     const worldX = groundX - outline.imageOffsetX;
     const worldY = groundBarY - outline.imageOffsetY;
 
-    const outlineBody = Bodies.fromVertices(worldX, worldY, [outline.outlineLocal], {}, true);
+    const outlineBody = Bodies.fromVertices(worldX, worldY, [outline.outlineLocal], PIECE_MATERIAL, true);
     // 輪郭は丸みを帯びているため、駒がそのまま乗ると側面に重なって見えてしまう。
     // 見た目には影響しない「平らな支え」を頂上に足して、駒がぴったり乗るようにする。
     const topY = outlineBody.bounds.min.y;
-    const flatTop = Bodies.rectangle(worldX, topY + 5, GROUND_W * 0.7, 10);
+    const flatTop = Bodies.rectangle(worldX, topY + 5, GROUND_W * 0.7, 10, PIECE_MATERIAL);
     const outlineParts = outlineBody.parts.length > 1 ? outlineBody.parts.slice(1) : [outlineBody];
     const shapedGround = Body.create({ parts: [...outlineParts, flatTop], isStatic: true });
 
@@ -383,6 +385,9 @@ export class TowerBattleEngine {
       if (b.velocity.y > MAX_FALL_SPEED) {
         Body.setVelocity(b, { x: b.velocity.x, y: MAX_FALL_SPEED });
       }
+      if (Math.abs(b.angularVelocity) > MAX_ANGULAR_SPEED) {
+        Body.setAngularVelocity(b, Math.sign(b.angularVelocity) * MAX_ANGULAR_SPEED);
+      }
     });
   }
 
@@ -441,9 +446,7 @@ export class TowerBattleEngine {
 
   private handlePointerMove = (e: PointerEvent): void => {
     if (!this.isDraggingPiece || this.phase !== "aiming" || !this.currentBody) return;
-    // 画面がviewScaleで縮小表示されている間は、指の移動量(見た目上の量)に対して
-    // 駒の実座標(ワールド座標)はより大きく動かさないと、見た目の追従が遅くなってしまう
-    const deltaX = ((e.clientX - this.dragStartClientX) * this.canvasScale()) / this.viewScale;
+    const deltaX = (e.clientX - this.dragStartClientX) * this.canvasScale();
     this.dragMoved = Math.max(this.dragMoved, Math.abs(e.clientX - this.dragStartClientX));
     let x = this.dragStartPieceX + deltaX;
     const margin = this.pieceHorizontalMargin(this.currentBody);
@@ -504,22 +507,18 @@ export class TowerBattleEngine {
   // ---- 内部: 描画 ----
 
   // タワー(＋今照準中の駒)が一番高くなっている場所を元に、
-  // キャンバス上端(y=0)より外に出そうな分だけ画面全体を縮小する倍率を求める。
-  // これをしないと、キャンバスは固定サイズ(380x640)の描画バッファなので、
-  // タワーが積み上がってy<0の領域に達した駒はCSSの調整に関係なく単純に描画されず「見切れる」。
-  private computeTargetViewScale(): number {
+  // キャンバス上端(y=0)より外に出そうな分だけ画面全体を下にずらす量(=カメラを上にスライドさせる量)を求める。
+  // 縮小はせず平行移動だけなので、タワーが高くなるほど土台は画面下から見切れていってよい。
+  private computeTargetCameraOffsetY(): number {
     const bodies = Composite.allBodies(this.engine.world).filter((b) => b !== this.ground);
     let minY = Infinity;
     bodies.forEach((b) => {
       if (b.bounds.min.y < minY) minY = b.bounds.min.y;
     });
     if (this.currentBody && this.currentBody.bounds.min.y < minY) minY = this.currentBody.bounds.min.y;
-    if (!isFinite(minY)) return 1;
+    if (!isFinite(minY)) return 0;
 
-    const visibleTop = minY - VIEW_TOP_MARGIN;
-    if (visibleTop >= 0) return 1;
-    // 下端(y=CANVAS_H)を基準に、visibleTopがちょうどy'=0に収まるまで縮小する
-    return CANVAS_H / (CANVAS_H - visibleTop);
+    return Math.max(0, VIEW_TOP_MARGIN - minY);
   }
 
   private drawBody(body: PieceBody): void {
@@ -577,17 +576,15 @@ export class TowerBattleEngine {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, this.dpr * this.offsetX, this.dpr * this.offsetY);
     ctx.scale(this.renderScale, this.renderScale);
 
-    // タワーが上端に近づいたら、下端(土台)を基準に画面全体を縮小して全体を収める
-    const targetScale = this.computeTargetViewScale();
-    this.viewScale += (targetScale - this.viewScale) * VIEW_ZOOM_SMOOTHING;
-    if (Math.abs(targetScale - this.viewScale) < 0.001) this.viewScale = targetScale;
+    // タワーが上端に近づいたら、その分だけカメラを上にスライドさせる(土台は下に見切れてよい)。
+    // 一度上げたカメラは、駒が倒れて一時的にタワーの最高点が下がった時などにも
+    // 下に戻さない(片道): 新しいタワーを始める時はclearWorld側でリセットする。
+    const targetOffsetY = Math.max(this.cameraOffsetY, this.computeTargetCameraOffsetY());
+    this.cameraOffsetY += (targetOffsetY - this.cameraOffsetY) * VIEW_PAN_SMOOTHING;
+    if (Math.abs(targetOffsetY - this.cameraOffsetY) < 0.001) this.cameraOffsetY = targetOffsetY;
 
     ctx.save();
-    if (this.viewScale < 1) {
-      ctx.translate(CANVAS_W / 2, CANVAS_H);
-      ctx.scale(this.viewScale, this.viewScale);
-      ctx.translate(-CANVAS_W / 2, -CANVAS_H);
-    }
+    ctx.translate(0, this.cameraOffsetY);
 
     this.drawGround(ctx);
 
