@@ -1,3 +1,13 @@
+# ひなこタワーバトル
+
+あそぶ: https://hinako-tower-battle.vercel.app
+
+## 写真について
+
+このリポジトリの写真（`public/images/` など）は実在の人物を撮影したものです。
+写真の著作権・肖像権は撮影者と被写体本人にあります。
+このゲームで遊ぶ以外の目的での利用・転載・加工・再配布はしないでください。
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
